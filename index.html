@@ -492,7 +492,7 @@ const Tower=(()=>{
 
 /* ---------- game state ---------- */
 const G={state:'menu',t:0,score:0,best:0,lives:3,mult:1,grace:false,lastFlavor:null,cam:0,alt:0,
-  shake:0,flash:0,menuLift:0,spawnT:1,junkRun:0,bestMult:1,tall:0,overT:0,overShown:false,ms:0,frame:0};
+  shake:0,flash:0,menuLift:0,spawnT:1,junkRun:0,last:null,tight:false,bestMult:1,tall:0,overT:0,overShown:false,ms:0,frame:0};
 const cone={x:195,v:0,af:0,target:195};
 let stack=[],items=[],debris=[],parts=[],pops=[];
 const MILE=[{n:12,t:'Cloud nine'},{n:28,t:'Stratosphere'},{n:45,t:'Orbit'},{n:65,t:'Deep space'},{n:90,t:'Ice cream galaxy'}];
@@ -559,19 +559,55 @@ function gameOver(){
   else G.newBest=false;
 }
 
-/* ---------- spawning ---------- */
-function spawn(){
-  const n=stack.length,top=stack[n-1];
-  const junkP=Math.min(.32,.17+n*.0025),goldP=.065,r=Math.random();
+/* ---------- spawning ----------
+   Objects arrive in an uneven rhythm: most come alone, some follow right on the heels of the last one
+   (same lane, or a quick swing to the side), some drop in side by side, and some come after a breather.
+   The average number of objects per second stays the same, so the ramp is unchanged. */
+const MIN_SEP=74;                                    /* least vertical gap in px between objects falling in one lane */
+function pickKind(bonusJunk){
+  const n=stack.length,junkP=Math.min(.32,.17+n*.0025)+bonusJunk,goldP=.065,r=Math.random();
   let kind='scoop';
   if(G.junkRun<2&&r<junkP)kind='junk';else if(r<junkP+goldP)kind='gold';
   G.junkRun=kind==='junk'?G.junkRun+1:0;
-  const near=Math.random()<.45,tx=top?top.px:cone.x;
-  const x=near?clamp(tx+rnd(-150,150),R+10,W-R-10):rnd(R+10,W-R-10);
+  return kind;
+}
+function spawnOne(kind,x,vy){
+  const n=stack.length;
   let f=FLAVORS[(Math.random()*FLAVORS.length)|0];
   if(G.lastFlavor&&Math.random()<.3)f=G.lastFlavor;   /* keep streaks within reach */
-  items.push({kind,f,bx:x,x,y:-R*2-10,vy:fallSpeed(n)*rnd(.92,1.08),vx:0,rot:rnd(0,TAU),vr:rnd(-3.5,3.5),
+  items.push({kind,f,bx:x,x,y:-R*2-10,vy,vx:0,rot:rnd(0,TAU),vr:rnd(-3.5,3.5),
     sw:rnd(0,TAU),swA:n>10?rnd(0,Math.min(28,n*.6)):0,type:(Math.random()*JUNK.length)|0,bounced:false,age:0});
+  G.last={x,vy,kind};
+}
+function spawn(mode){            /* mode: 'tight' trails the last object, 'pair' drops two side by side, else one */
+  const n=stack.length,top=stack[n-1],prev=G.last;
+  const kind=pickKind(mode==='tight'?.1:0);          /* junk is likelier right behind another object */
+  let x,vy=fallSpeed(n)*rnd(.88,1.12);
+  if(mode==='tight'&&prev){
+    if(Math.random()<.35){x=prev.x+rnd(-22,22);vy=prev.vy*rnd(.98,1.02)}      /* same lane: holds its spacing */
+    else x=prev.x+(Math.random()<.5?-1:1)*rnd(80,230);                         /* or a quick swing to the side */
+  }else{
+    const near=Math.random()<.45,tx=top?top.px:cone.x;
+    x=near?tx+rnd(-150,150):rnd(R+10,W-R-10);
+  }
+  x=clamp(x,R+10,W-R-10);
+  spawnOne(kind,x,vy);
+  if(mode==='pair'){
+    const x2=clamp(x+(x<W/2?1:-1)*rnd(140,260),R+10,W-R-10);
+    spawnOne(pickKind(0),x2,vy*rnd(.97,1.03));
+  }
+}
+function nextGap(mode){          /* seconds until the next object, and whether that one trails right behind */
+  const n=stack.length,base=Math.max(.65,1.25-n*.005);
+  G.tight=false;
+  if(n<4)return base*rnd(.9,1.2);                    /* a calm start */
+  const r=Math.random();
+  if(r<(mode==='tight'?.15:.3)){
+    G.tight=true;
+    return Math.max(base*rnd(.22,.42),MIN_SEP/fallSpeed(n));
+  }
+  const breather=(mode==='pair'?1.35:1)*(mode==='tight'?1.15:1);
+  return base*breather*(r<.62?rnd(.74,1.07):rnd(1.2,1.76));
 }
 
 /* ---------- per-frame updates ---------- */
@@ -598,7 +634,10 @@ function playStep(dt){
   updateStack(dt);
 
   G.spawnT-=dt;
-  if(G.spawnT<=0){spawn();G.spawnT=Math.max(.65,1.25-stack.length*.005)*rnd(.85,1.15)}
+  if(G.spawnT<=0){
+    const mode=G.tight?'tight':(stack.length>=4&&Math.random()<.13?'pair':'single');
+    spawn(mode);G.spawnT=nextGap(mode);
+  }
 
   for(let k=items.length-1;k>=0;k--){
     const it=items[k],py=it.y;
@@ -652,7 +691,7 @@ function menuDemo(){
 }
 function startGame(){
   stack=[];items=[];debris=[];parts=[];pops=[];Tower.reset();
-  Object.assign(G,{state:'play',score:0,lives:3,mult:1,grace:false,lastFlavor:null,alt:0,spawnT:.9,junkRun:0,
+  Object.assign(G,{state:'play',score:0,lives:3,mult:1,grace:false,lastFlavor:null,alt:0,spawnT:.9,junkRun:0,last:null,tight:false,
     bestMult:1,tall:0,ms:0,shake:0,flash:0,overT:0,overShown:false,newBest:false});
   cone.x=W/2;cone.v=0;cone.af=0;cone.target=W/2;
   tiltCalibrate();
@@ -969,7 +1008,7 @@ resize();
 new ResizeObserver(resize).observe(cv);
 buildLives();menuDemo();drawIcons();
 try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(drawIcons)}catch(e){}
-if(location.hash==='#debug')window.__sc={G,cone,Tower,startGame,spawn,FL:FLAVORS,gameOver,hitJunk,get SB(){return SB},get H(){return H},get stack(){return stack},get items(){return items},get parts(){return parts}};
+if(location.hash==='#debug')window.__sc={G,cone,Tower,startGame,spawn,update,FL:FLAVORS,gameOver,hitJunk,get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
 requestAnimationFrame(frame);
 })();
 </script>
