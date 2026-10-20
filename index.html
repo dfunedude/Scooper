@@ -126,36 +126,8 @@ body{
 
 @media (prefers-reduced-motion:reduce){.banner.show{animation:none;opacity:1}.toast{transition:none}}
 </style>
-<style>
-/* Home-screen mode: iOS 26 can report a viewport shorter than the screen (by the status-bar height).
-   The script below sets --app-h to the full screen height, and the canvas and UI layers use it.
-   Without it the variable is unset and everything is plain 100%, as in a normal browser tab. */
-html{background:#1a1347}
-#cv{position:fixed;top:0;left:0;right:auto;bottom:auto;width:100%;height:var(--app-h,100%)}
-.ui{position:fixed;top:0;left:0;right:0;bottom:auto;height:var(--app-h,100%)}
-</style>
 </head>
 <body>
-<script>
-(function(){
-  var root=document.documentElement;
-  function mk(h){var d=document.createElement('div');d.setAttribute('aria-hidden','true');
-    d.style.cssText='position:fixed;left:0;top:0;width:1px;height:'+h+';visibility:hidden;pointer-events:none';
-    document.body.appendChild(d);return d}
-  var pTop=mk('env(safe-area-inset-top,0px)'),pLv=mk('100lvh');
-  function fit(){
-    var ih=window.innerHeight,iw=window.innerWidth,st=pTop.offsetHeight||0,lv=pLv.offsetHeight||0;
-    var standalone=navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);
-    var h=ih;
-    if(standalone&&ih>=iw&&st>0){h=Math.max(ih,Math.min(Math.max(screen.height||0,lv),ih+st))}   /* never taller than the status bar's worth */
-    if(h>ih)root.style.setProperty('--app-h',h+'px');else root.style.removeProperty('--app-h');
-  }
-  fit();[100,500,1000,2000].forEach(function(t){setTimeout(fit,t)});   /* values can be stale right after launch */
-  addEventListener('resize',fit);addEventListener('pageshow',fit);
-  addEventListener('orientationchange',function(){setTimeout(fit,300)});
-  document.addEventListener('visibilitychange',fit);
-})();
-</script>
 <canvas id="cv" aria-label="Scooper playfield"></canvas>
 <div id="safe" aria-hidden="true" style="position:fixed;left:0;bottom:0;width:1px;height:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none"></div>
 
@@ -525,8 +497,7 @@ const cone={x:195,v:0,af:0,target:195};
 let stack=[],items=[],debris=[],parts=[],pops=[];
 const MILE=[{n:12,t:'Cloud nine'},{n:28,t:'Stratosphere'},{n:45,t:'Orbit'},{n:65,t:'Deep space'},{n:90,t:'Ice cream galaxy'}];
 
-const groundOff=()=>Math.max(34,SB+18);      /* gap under the cone; larger above the iPhone home indicator */
-const GROUND=()=>H-groundOff();
+const GROUND=()=>H-34-SB;
 const sy=h=>GROUND()-h+G.cam;               /* world height to screen y */
 const centerH=i=>CH+14+i*SP;                 /* height of scoop i's center */
 const fallSpeed=n=>Math.min(470,150+n*2.6);  /* ramps up as the stack grows */
@@ -984,7 +955,7 @@ function resize(){
   FW=cw/scale;H=ch/scale;W=Math.min(FW,480);offX=(FW-W)/2;
   SB=Math.min(60,($('#safe')?$('#safe').offsetHeight:0)/scale);
   const sh=document.querySelector('#menu .sheet');
-  G.menuLift=sh?Math.max(0,sh.offsetHeight/scale-groundOff()+10+(Math.max(12/scale,SB)-12/scale)):0;
+  G.menuLift=sh?Math.max(0,sh.offsetHeight/scale-34+10):0;
   if(G.state==='menu'){cone.x=W/2;stack.forEach(s=>s.px=cone.x)}else cone.x=clamp(cone.x,M,W-M);
 }
 let lastTs=0;
