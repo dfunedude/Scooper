@@ -87,19 +87,8 @@ body{
   opacity:0;transform:translateY(-6px);transition:opacity .25s,transform .25s;
 }
 .toast.on{opacity:1;transform:none}
-.banner{
-  position:absolute;left:0;right:0;top:24%;text-align:center;pointer-events:none;opacity:0;
-  font-family:var(--display);font-size:clamp(34px,11vw,52px);color:var(--gold);
-  text-shadow:0 4px 0 var(--ink),0 0 24px rgba(255,207,74,.55);
-}
-.banner.show{animation:bn 2s ease-out}
-@keyframes bn{
-  0%{opacity:0;transform:scale(.7)}
-  14%{opacity:1;transform:scale(1.07)}
-  24%{transform:scale(1)}
-  78%{opacity:1}
-  100%{opacity:0;transform:translateY(-16px)}
-}
+/* the level banner is drawn on the canvas; this copy is only for screen readers */
+.banner{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
 /* Start screen */
 .logo{
@@ -187,7 +176,7 @@ body{
 .tops .ico{width:40px;height:40px}
 @media (max-height:700px){.tops{display:none}}      /* short phones: the toppings are in the patch notes and obvious in play */
 
-@media (prefers-reduced-motion:reduce){.banner.show{animation:none;opacity:1}.toast{transition:none}.buff.low{animation:none}.life.gain{animation:none}.icon-btn{transition:none}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}.buff.low{animation:none}.life.gain{animation:none}.icon-btn{transition:none}}
 </style>
 </head>
 <body>
@@ -314,8 +303,13 @@ const CONFIG={
 
 /* ============================ PATCH NOTES ============================
    Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
-const VERSION='1.5';
+const VERSION='1.6';
 const PATCH_NOTES=[
+  {v:'1.6',title:'Higher and smoother',items:[
+    'Fixed the stutter when a new height level is announced. Steering stays smooth while the banner is on screen.',
+    'Eight new height levels after Ice cream galaxy, then endless light-years beyond.',
+    'Space fills up as you climb: satellites, an asteroid belt, planets, UFOs, comets, galaxies, nebulas, floating astronauts and more.',
+    'Very tall stacks run faster: scoops far below the screen rest quietly while the sway above stays the same.']},
   {v:'1.5',title:'Sauce, patch notes and settings',items:[
     'Hot fudge and strawberry syrup now pour over the scoop they land on, with a glossy cap and drips.',
     'New patch notes page. Tap the page icon in the corner to open it and tap it again to close it.',
@@ -776,6 +770,12 @@ const SKY=[
   [.42, [70,98,205], [168,152,236]],
   [.78, [18,16,72],  [46,28,104]],
   [1,   [5,5,26],    [22,12,60]],
+  [2.1, [20,8,52],   [56,20,86]],               /* asteroid belt: violet */
+  [3.3, [6,18,48],   [18,62,90]],               /* sprinkle nebula: teal */
+  [4.1, [2,2,8],     [14,6,24]],                /* black hole: nearly black */
+  [4.9, [8,10,40],   [36,28,84]],               /* milky way */
+  [6.9, [26,6,40],   [78,22,76]],               /* edge of the universe */
+  [8.2, [40,10,54],  [110,36,96]],              /* sundae multiverse: berry */
 ];
 function mixSky(t){
   for(let i=1;i<SKY.length;i++){
@@ -784,10 +784,10 @@ function mixSky(t){
       return[a[1].map((v,j)=>v+(b[1][j]-v)*k),a[2].map((v,j)=>v+(b[2][j]-v)*k)];
     }
   }
-  return[SKY[3][1],SKY[3][2]];
+  const z=SKY[SKY.length-1];return[z[1],z[2]];
 }
 const css=c=>`rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
-const STARS=Array.from({length:150},()=>({x:Math.random(),y:Math.random(),s:rnd(.6,2.1),tw:rnd(0,TAU),l:rnd(.05,.3)}));
+const STARS=Array.from({length:300},()=>({x:Math.random(),y:Math.random(),s:rnd(.6,2.1),tw:rnd(0,TAU),l:rnd(.05,.3)}));   /* the first 150 always show, the rest fill in as you climb */
 const CLOUDS=Array.from({length:17},(_,i)=>({x:Math.random(),h:60+i*140+rnd(-40,40),z:rnd(.7,1.5),sp:rnd(3,10)}));
 let skyTop='rgb(84,174,255)';
 
@@ -817,6 +817,231 @@ function moon(g,x,y,r,a){
   g.fillStyle='rgba(90,86,130,.28)';
   [[.3,-.2,.2],[-.3,.25,.26],[.15,.45,.12],[-.45,-.3,.1]].forEach(c=>{g.beginPath();g.arc(c[0]*r,c[1]*r,c[2]*r,0,TAU);g.fill()});
   g.restore();
+}
+
+/* ---------- deep space: things you pass on the way up ----------
+   Above Orbit the sky fills with satellites, rocks, planets, galaxies and stranger things, more of them the higher you go.
+   Space is cut into bands of height; each band seeds its objects from its own number, so a band looks the same every time
+   it scrolls past. Only bands on screen are visited, and every object is an image painted once at load, so nothing new
+   is drawn from scratch mid-game. They are kept dim so scoops and junk always read first. */
+const PCOL=[['#bfeaff','#4f97d8','#1d3f78'],['#ffd9b0','#e0784a','#6e2a26'],['#d6f7a6','#5aa85a','#1f4a35'],
+            ['#f4c4ff','#a85ad8','#3f1f73'],['#fff1b8','#e6b94a','#7a4f17'],['#ffc2d3','#e5527a','#6e1838']];
+const GCOL=[['255,224,244','255,130,196'],['214,236,255','120,168,255'],['222,255,238','104,226,186']];
+const NCOL=[['255,110,170','140,90,255'],['90,220,200','80,120,255'],['255,180,90','255,90,140'],['170,120,255','90,200,255']];
+const SPRINK=['#ff7aa6','#72e6c3','#ffd54d','#938ff7','#fff6e4'];
+const SPACE_PAINT={
+  planet(g,v){                                /* banded planet; odd variants wear a ring */
+    const r=22,[hi,mid,lo]=PCOL[v%PCOL.length],ringed=v%2===1;
+    const ring=(a0,a1)=>{g.beginPath();g.ellipse(0,0,r*1.7,r*.42,-.3,a0,a1);g.lineWidth=r*.17;g.strokeStyle='rgba(255,236,200,.6)';g.stroke()};
+    if(ringed)ring(Math.PI,TAU);
+    const gr=g.createRadialGradient(-r*.4,-r*.4,r*.1,0,0,r);gr.addColorStop(0,hi);gr.addColorStop(.55,mid);gr.addColorStop(1,lo);
+    g.fillStyle=gr;g.beginPath();g.arc(0,0,r,0,TAU);g.fill();
+    g.save();g.clip();
+    const rn=seeded(v*131+7);
+    for(let i=0;i<3;i++){g.fillStyle=i===1?'rgba(255,255,255,.14)':'rgba(0,0,0,.16)';g.fillRect(-r,(rn()*1.6-.8)*r,2*r,r*(.08+rn()*.14))}
+    const sh=g.createLinearGradient(-r,-r,r,r);sh.addColorStop(.45,'rgba(5,3,20,0)');sh.addColorStop(1,'rgba(5,3,20,.55)');
+    g.fillStyle=sh;g.fillRect(-r,-r,2*r,2*r);
+    g.restore();
+    if(ringed)ring(0,Math.PI);
+  },
+  rock(g,v){                                  /* a lumpy asteroid with craters */
+    const r=14,rn=seeded(v*977+3),N=10,p=[];
+    for(let i=0;i<N;i++){const a=i/N*TAU,k=.72+rn()*.3;p.push([Math.cos(a)*r*k,Math.sin(a)*r*k*.86])}
+    const body=()=>{
+      g.beginPath();const m=i=>{const a=p[i%N],b=p[(i+1)%N];return[(a[0]+b[0])/2,(a[1]+b[1])/2]};
+      const s=m(N-1);g.moveTo(s[0],s[1]);
+      for(let i=0;i<N;i++){const e=m(i);g.quadraticCurveTo(p[i][0],p[i][1],e[0],e[1])}
+      g.closePath();
+    };
+    body();const gr=g.createRadialGradient(-r*.35,-r*.35,r*.1,0,0,r*1.1);
+    gr.addColorStop(0,'#c4bccf');gr.addColorStop(.55,'#7a7290');gr.addColorStop(1,'#3d3654');
+    g.fillStyle=gr;g.fill();
+    g.save();body();g.clip();
+    for(let i=0;i<3;i++){
+      const x=(rn()-.5)*r,y=(rn()-.5)*r*.8,cr=r*(.14+rn()*.16);
+      g.fillStyle='rgba(30,24,50,.4)';g.beginPath();g.arc(x,y,cr,0,TAU);g.fill();
+      g.fillStyle='rgba(230,225,240,.3)';g.beginPath();g.arc(x+cr*.25,y+cr*.25,cr*.75,0,TAU);g.fill();
+    }
+    g.restore();
+    body();g.lineWidth=1.5;g.strokeStyle='rgba(12,8,34,.7)';g.stroke();
+  },
+  sat(g){                                     /* a satellite: gold foil body, two solar panels, a dish */
+    g.lineJoin='round';g.lineCap='round';
+    g.fillStyle='#9aa0b8';g.fillRect(-14,-1.5,28,3);
+    [-46,10].forEach(x0=>{
+      rr(g,x0,-9,36,18,2);g.fillStyle='#3d6fd1';g.fill();g.lineWidth=1.6;g.strokeStyle=INK;g.stroke();
+      g.strokeStyle='rgba(180,215,255,.7)';g.lineWidth=1;g.beginPath();
+      for(let k=1;k<4;k++){g.moveTo(x0+k*9,-8);g.lineTo(x0+k*9,8)}
+      g.moveTo(x0+1,0);g.lineTo(x0+35,0);g.stroke();
+    });
+    g.strokeStyle=INK;g.lineWidth=1.6;g.beginPath();g.moveTo(0,-12);g.lineTo(0,-19);g.stroke();
+    g.beginPath();g.ellipse(0,-21,8,3.2,0,0,TAU);g.fillStyle='#e8e8f0';g.fill();g.stroke();
+    rr(g,-10,-12,20,24,3);const gr=g.createLinearGradient(-10,0,10,0);gr.addColorStop(0,'#f6d77a');gr.addColorStop(.5,'#d9a531');gr.addColorStop(1,'#9c6c12');
+    g.fillStyle=gr;g.fill();g.stroke();
+  },
+  ufo(g){                                     /* a flying saucer with a little green pilot */
+    g.lineJoin='round';
+    g.fillStyle='#7fe08a';g.beginPath();g.arc(0,-7,7,0,TAU);g.fill();
+    g.fillStyle=INK;g.beginPath();g.ellipse(-2.5,-8,1.4,2,0,0,TAU);g.ellipse(2.5,-8,1.4,2,0,0,TAU);g.fill();
+    g.beginPath();g.ellipse(0,-4,14,14,0,Math.PI,TAU);g.fillStyle='rgba(170,240,255,.45)';g.fill();g.lineWidth=1.8;g.strokeStyle=INK;g.stroke();
+    g.fillStyle='rgba(255,255,255,.7)';g.beginPath();g.ellipse(-6,-12,3,1.5,-.6,0,TAU);g.fill();
+    g.beginPath();g.ellipse(0,0,34,10,0,0,TAU);
+    const gr=g.createLinearGradient(0,-10,0,10);gr.addColorStop(0,'#f0f2fa');gr.addColorStop(1,'#80869f');
+    g.fillStyle=gr;g.fill();g.stroke();
+    ['#ffd54d','#ff7aa6','#72e6c3','#ff7aa6','#ffd54d'].forEach((c,i)=>{g.fillStyle=c;g.beginPath();g.arc(-20+i*10,3,2.6,0,TAU);g.fill()});
+  },
+  galaxy(g,v){                                /* a spiral galaxy, painted flat-on and squashed into a tilted disc */
+    const r=60,[c0,c1]=GCOL[v%GCOL.length],rn=seeded(v*53+11);
+    g.save();g.scale(1,.5);
+    const gl=g.createRadialGradient(0,0,0,0,0,r);gl.addColorStop(0,`rgba(${c0},.75)`);gl.addColorStop(.3,`rgba(${c1},.25)`);gl.addColorStop(1,`rgba(${c1},0)`);
+    g.fillStyle=gl;g.beginPath();g.arc(0,0,r,0,TAU);g.fill();
+    for(let arm=0;arm<2;arm++)for(let j=0;j<150;j++){
+      const u=j/150,th=u*3.4+arm*Math.PI+(rn()-.5)*.35,rad=r*(.08+.88*u)+(rn()-.5)*5;
+      g.globalAlpha=(1-u)*.8+.15;g.fillStyle=rn()<.35?`rgb(${c0})`:`rgb(${c1})`;
+      const s=.7+rn()*1.3;g.fillRect(Math.cos(th)*rad,Math.sin(th)*rad,s,s);
+    }
+    g.globalAlpha=1;
+    const core=g.createRadialGradient(0,0,0,0,0,r*.22);core.addColorStop(0,'rgba(255,255,255,.95)');core.addColorStop(1,`rgba(${c0},0)`);
+    g.fillStyle=core;g.beginPath();g.arc(0,0,r*.22,0,TAU);g.fill();
+    g.restore();
+  },
+  nebula(g,v){                                /* a soft cloud of color, with sprinkles in it */
+    const r=150,[a,b]=NCOL[v%NCOL.length],rn=seeded(v*313+5);
+    for(let i=0;i<8;i++){
+      const x=(rn()-.5)*r*.9,y=(rn()-.5)*r*.7,cr=r*(.3+rn()*.35),c=i%2?a:b;
+      const gr=g.createRadialGradient(x,y,0,x,y,cr);gr.addColorStop(0,`rgba(${c},.3)`);gr.addColorStop(1,`rgba(${c},0)`);
+      g.fillStyle=gr;g.fillRect(x-cr,y-cr,cr*2,cr*2);
+    }
+    for(let i=0;i<46;i++){
+      const d=Math.pow(rn(),1.6)*r*.62,t=rn()*TAU;
+      g.save();g.translate(Math.cos(t)*d,Math.sin(t)*d*.75);g.rotate(rn()*TAU);g.globalAlpha=.55+rn()*.35;
+      rr(g,-1.6,-4.5,3.2,9,1.6);g.fillStyle=SPRINK[(rn()*SPRINK.length)|0];g.fill();g.restore();
+    }
+  },
+  hole(g){                                    /* a black hole with a glowing disk around it */
+    const r=26;
+    const gl=g.createRadialGradient(0,0,r*.6,0,0,r*2.3);gl.addColorStop(0,'rgba(255,150,90,.45)');gl.addColorStop(1,'rgba(255,90,150,0)');
+    g.fillStyle=gl;g.fillRect(-r*2.3,-r*2.3,r*4.6,r*4.6);
+    const dk=g.createLinearGradient(-r*2,0,r*2,0);dk.addColorStop(0,'#ff7aa6');dk.addColorStop(.5,'#ffe2a0');dk.addColorStop(1,'#ff9a4a');
+    const disk=(a0,a1)=>{g.beginPath();g.ellipse(0,0,r*2,r*.5,-.18,a0,a1);g.lineWidth=r*.34;g.strokeStyle=dk;g.stroke()};
+    disk(Math.PI,TAU);
+    g.fillStyle='#000';g.beginPath();g.arc(0,0,r,0,TAU);g.fill();
+    g.lineWidth=2.2;g.strokeStyle='rgba(255,226,180,.9)';g.stroke();
+    disk(0,Math.PI);
+  },
+  astro(g){                                   /* a floating astronaut who brought a cone */
+    g.lineJoin='round';g.lineCap='round';g.lineWidth=1.8;g.strokeStyle=INK;
+    rr(g,-14,-10,28,26,6);g.fillStyle='#c9cde0';g.fill();g.stroke();
+    g.fillStyle='#fbfbff';
+    rr(g,-10,12,8,14,4);g.fill();g.stroke();rr(g,2,12,8,14,4);g.fill();g.stroke();
+    rr(g,-11,-6,22,24,9);g.fill();g.stroke();
+    g.save();g.translate(9,-2);g.rotate(-.9);rr(g,-3.5,-16,7,17,3.5);g.fill();g.stroke();g.restore();   /* the arm holding the cone up */
+    rr(g,-6,2,12,7,2);g.fillStyle='#ff7aa6';g.fill();g.stroke();
+    g.fillStyle='#fbfbff';g.beginPath();g.arc(0,-16,12,0,TAU);g.fill();g.stroke();
+    const vg=g.createLinearGradient(-6,-22,8,-10);vg.addColorStop(0,'#6fe3c1');vg.addColorStop(1,'#2c2370');
+    g.beginPath();g.ellipse(2,-16,8,6.5,0,0,TAU);g.fillStyle=vg;g.fill();g.stroke();
+    g.fillStyle='rgba(255,255,255,.8)';g.beginPath();g.ellipse(-1,-19,2.6,1.3,-.5,0,TAU);g.fill();
+    g.beginPath();g.moveTo(16,-14);g.lineTo(26,-14);g.lineTo(21,-1);g.closePath();g.fillStyle='#e8b06a';g.fill();g.stroke();
+    stampScoop(g,FLAVORS[1],21,-18,0,0,.26);
+  },
+  comet(g){                                   /* head on the right, tail streaming left */
+    const tg=g.createLinearGradient(-90,0,72,0);tg.addColorStop(0,'rgba(170,230,255,0)');tg.addColorStop(1,'rgba(205,245,255,.75)');
+    g.fillStyle=tg;g.beginPath();g.moveTo(72,-9);g.quadraticCurveTo(-10,-7,-90,0);g.quadraticCurveTo(-10,7,72,9);g.closePath();g.fill();
+    const hg=g.createRadialGradient(72,0,0,72,0,16);hg.addColorStop(0,'rgba(255,255,255,1)');hg.addColorStop(.35,'rgba(200,245,255,.8)');hg.addColorStop(1,'rgba(160,220,255,0)');
+    g.fillStyle=hg;g.fillRect(56,-16,32,32);
+  },
+  band(g){                                    /* the Milky Way: a long river of dust and stars, tilted in the image itself */
+    const rn=seeded(909);g.rotate(-.36);
+    for(let i=0;i<10;i++){
+      const x=(i/9-.5)*460+(rn()-.5)*30,y=(rn()-.5)*24,cr=60+rn()*40;
+      const gr=g.createRadialGradient(x,y,0,x,y,cr);gr.addColorStop(0,`rgba(${i%3?'210,200,255':'255,210,235'},.22)`);gr.addColorStop(1,'rgba(200,190,255,0)');
+      g.fillStyle=gr;g.fillRect(x-cr,y-cr,cr*2,cr*2);
+    }
+    g.fillStyle='#fff';
+    for(let i=0;i<420;i++){const x=(rn()-.5)*500,y=(rn()+rn()+rn()-1.5)*40,s=.6+rn()*1.2;g.globalAlpha=.3+rn()*.6;g.fillRect(x,y,s,s)}
+    g.globalAlpha=1;
+  }
+};
+const SPACE_SIZE={planet:[84,52],rock:[34,30],sat:[100,50],ufo:[76,40],galaxy:[124,64],nebula:[310,250],hole:[124,124],astro:[64,62],comet:[184,36],band:[500,300]};
+const SPACE_VARS={planet:PCOL.length,rock:5,galaxy:GCOL.length,nebula:NCOL.length};
+const SPACE_SPR={};
+for(const k in SPACE_PAINT){
+  const big=k==='nebula'||k==='band',ss=big?1:2;          /* soft, big things do not need sharp pixels */
+  const[w,h]=SPACE_SIZE[k];
+  SPACE_SPR[k]=Array.from({length:SPACE_VARS[k]||1},(_,v)=>{
+    const c=document.createElement('canvas');c.width=Math.ceil(w*ss);c.height=Math.ceil(h*ss);
+    const g=c.getContext('2d');g.scale(ss,ss);g.translate(w/2,h/2);SPACE_PAINT[k](g,v);return c;
+  });
+}
+
+const SPACE_BAND=200;
+const SPACE_LAYERS=[{p:.3,k:.62,a:.5},{p:.5,k:1,a:.72}];            /* far and near: the far layer is smaller, dimmer and slower */
+const bandScoops=(h,p)=>((h-350)/p+125)/SP;                        /* about how tall the stack is when height h of this layer is mid-screen */
+const layerH=(n,p)=>(n*SP-125)*p+350;                              /* and back */
+function spaceKinds(n){                     /* what can turn up at this height, and how often */
+  const w=[];
+  if(n>=38)w.push(['sat',n<120?2:.7]);
+  if(n>=55)w.push(['rock',n>=105&&n<170?7:1.6]);
+  if(n>=70)w.push(['planet',2]);
+  if(n>=85)w.push(['galaxy',n>=250?2.4:1.3]);
+  if(n>=100)w.push(['ufo',.6]);
+  if(n>=140)w.push(['comet',1.1]);
+  if(n>=175)w.push(['nebula',n<225?2.2:.5]);
+  if(n>=230)w.push(['astro',.7]);
+  if(n>=330)w.push(['hole',.35]);
+  if(n>=400)w.push(['scoop',2.4]);
+  return w;
+}
+const spaceCache=new Map();
+function spaceBand(L,b){                    /* the objects in band b of layer L, made once from the band's seed */
+  const key=L*100000+b;
+  let list=spaceCache.get(key);if(list)return list;
+  const p=SPACE_LAYERS[L].p,n=bandScoops((b+.5)*SPACE_BAND,p),rn=seeded(b*7919+L*104729+17);
+  list=[];
+  const kinds=spaceKinds(n);
+  if(kinds.length){
+    const tot=kinds.reduce((s,k)=>s+k[1],0);
+    const want=Math.min(3.4,.5+(n-38)/70)+(n>=105&&n<170?1.5:0),count=Math.floor(want+rn());
+    for(let i=0;i<count;i++){
+      let u=rn()*tot,kind=kinds[0][0];
+      for(const[k,wt]of kinds){if(u<wt){kind=k;break}u-=wt}
+      if(kind==='nebula'&&L>0)kind='galaxy';   /* big soft clouds stay on the far layer: they are costly to paint large */
+      if(kind==='scoop'&&L>0)kind='planet';    /* scoop planets stay far and faint, so they never pass for a falling scoop */
+      list.push({kind,v:(rn()*16)|0,x:rn(),h:(b+rn())*SPACE_BAND,s:.75+rn()*.55,rot:rn()*TAU,spin:(rn()-.5)*.5,ph:rn()*TAU,sp:30+rn()*50,f:FLAVORS[(rn()*FLAVORS.length)|0]});
+    }
+  }
+  if(spaceCache.size>400)spaceCache.clear();
+  spaceCache.set(key,list);
+  return list;
+}
+/* landmarks: one big thing at the height of each new level, on the far layer */
+const LANDMARKS=[
+  {n:122,kind:'planet',v:3,x:.78,s:2.3},{n:154,kind:'comet',x:.3,s:1.6},{n:192,kind:'nebula',v:0,x:.5,s:1.5},
+  {n:228,kind:'hole',x:.32,s:1.7},{n:274,kind:'band',x:.5,s:1.2},{n:324,kind:'galaxy',v:1,x:.7,s:2.4},
+  {n:384,kind:'nebula',v:2,x:.4,s:1.7},{n:454,kind:'scoop',x:.5,s:1.5}
+].map(o=>Object.assign({h:layerH(o.n,SPACE_LAYERS[0].p),v:0,rot:0,spin:0,ph:1,sp:36,f:FLAVORS[0]},o));
+function drawSpaceObj(g,o,p,k,a){
+  let x=o.x*FW,y=GROUND()-o.h+G.cam*p,rot=o.rot,s=o.s*k;
+  if(o.kind==='comet'){x=((o.x*(FW+400)+G.t*o.sp*1.6)%(FW+400))-200;rot=.12}
+  else if(o.kind==='ufo'){x+=Math.sin(G.t*.6+o.ph)*40;y+=Math.sin(G.t*1.7+o.ph)*4;rot=Math.sin(G.t*1.1+o.ph)*.12}
+  else if(o.kind==='rock'||o.kind==='astro'||o.kind==='sat'){rot+=G.t*o.spin;x+=Math.sin(G.t*.2+o.ph)*12}
+  else if(o.kind!=='galaxy')rot=0;         /* big soft images are drawn upright: rotating them costs a lot on phones */
+  const[w,h]=SPACE_SIZE[o.kind]||[R*7,R*7],r=Math.max(w,h)*s*.6;
+  if(y<-r||y>H+r||x<-r||x>FW+r)return;
+  if(o.kind==='scoop'){g.globalAlpha=a*.5;stampScoop(g,o.f,x,y,0,Math.sin(G.t*.3+o.ph)*.2,s*3);return}   /* scoop-shaped planets */
+  const list=SPACE_SPR[o.kind],c=list[o.v%list.length];
+  g.globalAlpha=a;
+  g.save();g.translate(x,y);if(rot)g.rotate(rot);g.drawImage(c,-w*s/2,-h*s/2,w*s,h*s);g.restore();
+}
+function drawSpace(g,fade){
+  if(fade<=0)return;
+  for(let L=0;L<SPACE_LAYERS.length;L++){
+    const{p,k,a}=SPACE_LAYERS[L],base=GROUND()+G.cam*p,M2=280;
+    const b0=Math.max(0,Math.floor((base-H-M2)/SPACE_BAND)),b1=Math.floor((base+M2)/SPACE_BAND);
+    for(let b=b0;b<=b1;b++)for(const o of spaceBand(L,b))drawSpaceObj(g,o,p,k,a*fade);
+    if(L===0)for(const o of LANDMARKS){const y=GROUND()-o.h+G.cam*p;if(y>-400&&y<H+400)drawSpaceObj(g,o,p,1,.7*fade)}
+  }
+  g.globalAlpha=1;
 }
 
 /* ---------- tower sway ----------
@@ -850,11 +1075,14 @@ const Tower=(()=>{
 
 /* ---------- game state ---------- */
 const G={state:'menu',t:0,score:0,best:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,cam:0,alt:0,
-  shake:0,flash:0,menuLift:0,spawnT:1,junkRun:0,last:null,tight:false,bestMult:1,tall:0,overT:0,overShown:false,ms:0,frame:0,
+  shake:0,flash:0,menuLift:0,spawnT:1,junkRun:0,last:null,tight:false,bestMult:1,tall:0,overT:0,overShown:false,mi:0,frame:0,
   syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0}};
 const cone={x:195,v:0,af:0,target:195};
 let stack=[],items=[],debris=[],parts=[],pops=[];
-const MILE=[{n:12,t:'Cloud nine'},{n:28,t:'Stratosphere'},{n:45,t:'Orbit'},{n:65,t:'Deep space'},{n:90,t:'Ice cream galaxy'}];
+const MILE=[{n:12,t:'Cloud nine'},{n:28,t:'Stratosphere'},{n:45,t:'Orbit'},{n:65,t:'Deep space'},{n:90,t:'Ice cream galaxy'},
+  {n:120,t:'Asteroid belt'},{n:152,t:'Comet trail'},{n:190,t:'Sprinkle nebula'},{n:226,t:'Black hole'},{n:272,t:'Milky Way'},
+  {n:322,t:'Andromeda'},{n:382,t:'Edge of the universe'},{n:452,t:'Sundae multiverse'}];
+const mileAt=i=>i<MILE.length?MILE[i]:{n:MILE[MILE.length-1].n+(i-MILE.length+1)*80,t:'Light-year '+(i-MILE.length+1)};   /* endless levels past the last one */
 
 const GROUND=()=>H-34-SB;
 const sy=h=>GROUND()-h+G.cam;               /* world height to screen y */
@@ -899,8 +1127,10 @@ function landScoop(it,dx){
 }
 function milestone(){
   if(G.burst)return;                      /* a cherry burst announces itself; milestones wait for it to finish */
-  const n=stack.length;
-  for(const m of MILE){if(n>=m.n&&G.ms<m.n){G.ms=m.n;banner(m.t)}}
+  const n=stack.length;let hit=-1;
+  while(n>=mileAt(G.mi).n){hit=G.mi;G.mi++}
+  if(hit>=0)banner(mileAt(hit).t,'Level '+(hit+2)+' · '+mileAt(hit).n+' scoops');   /* level 1 is the ground */
+  warmBanner(G.mi);
 }
 function debrisFrom(s,i,vx0=0){
   debris.push({f:s.f,x:s.px,y:sy(centerH(i)),vx:vx0+rnd(-130,130),vy:rnd(-420,-200),rot:0,vr:rnd(-6,6),coat:s.coat?{k:s.coat.k,t:1}:null});
@@ -921,7 +1151,8 @@ function zapJunk(it){                      /* the cherry shield: junk fizzles in
 function gameOver(){
   G.state='over';G.overT=0;G.overShown=false;
   G.burst=null;G.shield=0;G.syrupT=0;
-  stack.forEach((s,i)=>debrisFrom(s,i));stack.length=0;items.length=0;Tower.reset();
+  for(let i=lowVisible(stack.length);i<stack.length;i++)debrisFrom(stack[i],i);   /* scoops below the screen just go */
+  stack.length=0;items.length=0;Tower.reset();settled=0;
   if(G.score>G.best){G.best=G.score;G.newBest=true;try{localStorage.setItem('scooper.best',String(G.best))}catch(e){}}
   else G.newBest=false;
 }
@@ -1077,9 +1308,19 @@ function nextGap(mode){          /* seconds until the next object, and whether t
 }
 
 /* ---------- per-frame updates ---------- */
+/* Culling: scoops below the bottom of the screen are not drawn or updated. The sway is unchanged: it is one
+   value for the whole column (Tower), and a scoop's place is worked out from it whenever it is on screen.
+   A scoop leaving the bottom is put to rest (no wobble, settled into the column) once, so a tall stack costs
+   only what is on screen. */
+let settled=0;                               /* scoops below this index have been put to rest */
+function lowVisible(n){                      /* the lowest scoop that can be on screen */
+  return clamp(Math.floor((GROUND()+G.cam-H-120-CH-14)/SP),0,n);
+}
 function updateStack(dt){
-  const n=stack.length;
-  for(let i=0;i<n;i++){
+  const n=stack.length,lo=lowVisible(n);
+  if(settled>n)settled=n;
+  for(;settled<lo;settled++){const s=stack[settled];s.jx=0;s.sq=0;s.sqv=0;s.dy=0;if(s.coat)s.coat.t=1}
+  for(let i=lo;i<n;i++){
     const s=stack[i],jx=s.jx||0;
     s.px=cone.x+Tower.off(i,n)+jx;           /* scoop 0 is always exactly on the cone */
     s.jx=jx*Math.exp(-dt*(s.jr||16));        /* a fresh scoop settles into the column */
@@ -1162,6 +1403,7 @@ function commonStep(dt){
   G.cam+=(want-G.cam)*Math.min(1,dt*(want<G.cam?5:G.burst?6:3.2));   /* keep up with the burst */
   G.alt+=(hTop-G.alt)*Math.min(1,dt*1.5);
   G.shake=Math.max(0,G.shake-dt*2.2);G.flash=Math.max(0,G.flash-dt*1.6);
+  if(BAN.img&&(BAN.t+=dt)>=BAN.dur)BAN.img=null;
   for(let i=debris.length-1;i>=0;i--){const d=debris[i];d.vy+=1500*dt;d.x+=d.vx*dt;d.y+=d.vy*dt;d.rot+=d.vr*dt;if(d.y>H+120)debris.splice(i,1)}
   for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.l-=dt;if(p.l<=0){parts.splice(i,1);continue}if(!p.ring){p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt}}
   for(let i=pops.length-1;i>=0;i--){const p=pops[i];p.l+=dt;p.y-=48*dt;if(p.l>p.m)pops.splice(i,1)}
@@ -1174,25 +1416,25 @@ function update(dt){
 
 /* ---------- starting and resetting ---------- */
 function menuDemo(k=3){                      /* the demo cone on the start screen: fewer scoops when the screen is short */
-  items=[];debris=[];parts=[];pops=[];Tower.reset();
+  items=[];debris=[];parts=[];pops=[];Tower.reset();settled=0;
   cone.x=W/2;cone.v=0;cone.af=0;G.cam=-G.menuLift;G.alt=0;
   stack=[FLAVORS[0],FLAVORS[3],FLAVORS[1]].slice(0,k).map(f=>({f,jx:0,px:cone.x,sq:0,sqv:0}));
 }
 function startGame(){
-  stack=[];items=[];debris=[];parts=[];pops=[];Tower.reset();
+  stack=[];items=[];debris=[];parts=[];pops=[];Tower.reset();settled=0;BAN.img=null;
   Object.assign(G,{state:'play',score:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,alt:0,spawnT:.9,junkRun:0,last:null,tight:false,
-    bestMult:1,tall:0,ms:0,shake:0,flash:0,overT:0,overShown:false,newBest:false,
+    bestMult:1,tall:0,mi:0,shake:0,flash:0,overT:0,overShown:false,newBest:false,
     syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0}});
   cone.x=W/2;cone.v=0;cone.af=0;cone.target=W/2;
-  tiltCalibrate();
+  tiltCalibrate();warmBanner(0);
 }
 
 /* ---------- drawing ---------- */
 let skyBot='rgb(198,235,255)',flashC='255,90,90';
 
 function drawSky(g){
-  const t=clamp((G.alt-310)/2270,0,1);
-  const[top,bot]=mixSky(t);
+  const tt=Math.max(0,(G.alt-310)/2270),t=Math.min(1,tt);       /* t: blue sky to space. tt keeps going for the colors of the higher levels */
+  const[top,bot]=mixSky(tt);
   const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,css(top));gr.addColorStop(1,css(bot));
   g.fillStyle=gr;g.fillRect(0,0,FW,H);skyTop=css(top);skyBot=css(bot);
 
@@ -1208,8 +1450,9 @@ function drawSky(g){
   const sa=clamp((t-.25)/.5,0,1);
   if(sa>0){
     g.fillStyle='#fff';
-    for(const s of STARS){
-      const y=(s.y*H+G.cam*s.l)%H,tw=.6+.4*Math.sin(G.t*2+s.tw);
+    const ns=150+Math.floor(clamp((tt-1)/5,0,1)*150);
+    for(let i=0;i<ns;i++){
+      const s=STARS[i],y=(s.y*H+G.cam*s.l)%H,tw=.6+.4*Math.sin(G.t*2+s.tw);
       g.globalAlpha=sa*tw;g.fillRect(s.x*FW,y,s.s,s.s);
     }
     g.globalAlpha=1;
@@ -1227,6 +1470,7 @@ function drawSky(g){
     ringedPlanet(g,FW*.24,GROUND()-2000+G.cam*.8,58,pa);
     moon(g,FW*.8,GROUND()-2900+G.cam*.8,40,pa);
   }
+  drawSpace(g,pa);
   const ca=clamp(1-t*1.5,0,1);
   if(ca>0){
     for(const c of CLOUDS){
@@ -1243,7 +1487,7 @@ function drawAura(g,n){
   const sh=G.state==='play'&&shielded(),sr=G.state==='play'&&G.syrupT>0;
   if(!n||(!sh&&!sr))return;
   const shA=G.burst?1:Math.min(1,G.shield/.35),srA=Math.min(1,G.syrupT/.5);
-  for(let i=0;i<n;i++){
+  for(let i=lowVisible(n);i<n;i++){
     const s=stack[i],y=sy(centerH(i))-(s.dy||0);
     if(y<-110||y>H+110)continue;
     if(sr){g.globalAlpha=srA*(.5+.14*Math.sin(G.t*6+i*.7));g.drawImage(GLOWS.syrup,s.px-GW/2,y-GW/2,GW,GW)}
@@ -1263,9 +1507,10 @@ function drawTower(g){
   const n=stack.length,rimY=sy(CH),tipY=sy(0);
   if(rimY<H+50)drawCone(g,cone.x,rimY,tipY);
   drawAura(g,n);
-  for(let i=0;i<n;i++){
+  for(let i=lowVisible(n);i<n;i++){
     const s=stack[i],y0=sy(centerH(i));
-    if(y0<-70||y0>H+70)continue;
+    if(y0>H+70)continue;
+    if(y0<-70)break;                         /* everything above is off the top too */
     const y=y0-(s.dy||0);
     stampScoop(g,s.f,s.px,y,s.sq,0,1,s.coat);
     if(s.f===GOLD)sparkle(g,s.px+Math.cos(G.t*2+i)*R*.6,y+Math.sin(G.t*2.6+i)*R*.5,4+2*Math.sin(G.t*5+i),G.t);
@@ -1332,6 +1577,57 @@ function drawPops(g){
   }
 }
 
+/* ---------- banner: the level name, drawn on the canvas ----------
+   It used to be page text animated with CSS. On phones every frame of that animation repainted the big glowing text
+   over the game, and the game stuttered right when you needed control. Now the text is painted once into an image
+   (ahead of time where possible) and each frame only stamps it with a scale and a fade. */
+const BAN={img:null,t:0,dur:2},banCache=new Map(),MEAS=document.createElement('canvas').getContext('2d');
+let bodyBg='';
+const DFONT=s=>`${s}px "Lilita One","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif`;
+function paintBanner(text,sub=''){
+  const k=dpr*scale,key=text+'|'+sub;
+  let c=banCache.get(key);if(c)return c;
+  let fs=clamp(.11*FW*scale,34,52)/scale;    /* the size the old banner had */
+  MEAS.font=DFONT(fs);
+  const tw=MEAS.measureText(text).width,maxW=W-28;
+  if(tw>maxW)fs*=maxW/tw;                    /* long names shrink to fit instead of wrapping */
+  const pad=30,subH=sub?22:0,w=Math.min(FW,Math.min(tw,maxW)+pad*2),h=fs*1.25+subH+pad*2;
+  c=document.createElement('canvas');c.width=Math.ceil(w*k);c.height=Math.ceil(h*k);
+  const g=c.getContext('2d');g.scale(k,k);
+  g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';
+  const cx=w/2,ty=pad+subH+fs*.6;
+  if(sub){
+    g.font='800 14px "Nunito","Avenir Next Rounded",system-ui,sans-serif';
+    g.lineWidth=4;g.strokeStyle=INK;g.strokeText(sub.toUpperCase(),cx,pad+8);
+    g.fillStyle='#fff6e4';g.fillText(sub.toUpperCase(),cx,pad+8);
+  }
+  g.font=DFONT(fs);
+  g.shadowColor='rgba(255,207,74,.55)';g.shadowBlur=24*k;      /* shadowBlur ignores the scale, so it is set in real pixels */
+  g.fillStyle=INK;g.fillText(text,cx,ty+4);
+  g.shadowColor='rgba(0,0,0,0)';g.shadowBlur=0;
+  g.lineWidth=5;g.strokeStyle=INK;g.strokeText(text,cx,ty);
+  g.fillStyle='#ffcf4a';g.fillText(text,cx,ty);
+  c.lw=w;c.lh=h;c.ty=ty;
+  if(banCache.size>16)banCache.clear();
+  banCache.set(key,c);
+  return c;
+}
+function warmBanner(i){                      /* paint the next level's banner in a quiet moment, before it is needed */
+  const m=mileAt(i);
+  setTimeout(()=>{try{paintBanner(m.t,'Level '+(i+2)+' · '+m.n+' scoops');paintBanner('Cherry burst!')}catch(e){}},250);
+}
+function drawBanner(g){
+  const c=BAN.img;if(!c)return;
+  const u=BAN.t/BAN.dur;
+  let a=1,s=1,dy=0;                          /* the same curve the CSS animation had */
+  if(u<.14){const e=u/.14;a=e;s=.7+.37*(1-(1-e)*(1-e))}
+  else if(u<.24)s=1.07-.07*(u-.14)/.1;
+  else if(u>.78){const e=(u-.78)/.22;a=1-e;dy=-16*e}
+  if(reduce){s=1;dy=0}
+  g.save();g.globalAlpha=clamp(a,0,1);g.translate(FW/2,H*.24+c.ty-30+dy);g.scale(s,s);
+  g.drawImage(c,-c.lw/2,-c.ty,c.lw,c.lh);g.restore();
+}
+
 function draw(){
   const sc=dpr*scale;
   ctx.setTransform(sc,0,0,sc,0,0);
@@ -1341,7 +1637,11 @@ function draw(){
   drawTower(ctx);drawItems(ctx);drawDebris(ctx);drawParts(ctx);drawPops(ctx);
   ctx.restore();
   if(G.flash>0){ctx.fillStyle=`rgba(${flashC},${A3(Math.min(.5,G.flash*.5))})`;ctx.fillRect(0,0,FW,H)}
-  if(G.frame%6===0)document.body.style.background=`linear-gradient(${skyTop},${skyBot})`;
+  drawBanner(ctx);
+  if(G.frame%20===0){                        /* the page behind the canvas follows the sky, for the edges iPhone shows; only touched when it changes */
+    const bg=`linear-gradient(${skyTop},${skyBot})`;
+    if(bg!==bodyBg){bodyBg=bg;document.body.style.background=bg}
+  }
 }
 
 /* legend icons on the start sheet reuse the real sprites */
@@ -1503,8 +1803,9 @@ function hudUpdate(){
     el.buff.classList.toggle('low',G.syrupT<2.5);
   }
 }
-function banner(text){
-  el.banner.textContent=text;el.banner.classList.remove('show');void el.banner.offsetWidth;el.banner.classList.add('show');
+function banner(text,sub=''){
+  el.banner.textContent=sub?text+'. '+sub:text;              /* for screen readers */
+  BAN.img=paintBanner(text,sub);BAN.t=0;
 }
 function toast(msg,ms=3200){
   el.toast.textContent=msg;el.toast.classList.add('on');
@@ -1631,6 +1932,7 @@ function resize(){
   SB=Math.min(60,($('#safe')?$('#safe').offsetHeight:0)/scale);
   const sh=document.querySelector('#menu .sheet');
   G.menuLift=sh?Math.max(0,sh.offsetHeight/scale-34+10):0;
+  banCache.clear();
   if(G.state==='menu'){
     const k=demoScoops();                                    /* keep the demo stack clear of the title */
     if(k!==stack.length&&typeof menuDemo==='function'&&menuReady)menuDemo(k);
@@ -1647,8 +1949,8 @@ try{G.best=+localStorage.getItem('scooper.best')||0}catch(e){}
 resize();
 new ResizeObserver(resize).observe(cv);
 buildLives();menuReady=true;menuDemo(demoScoops());drawIcons();
-try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(()=>{drawIcons();resize()})}catch(e){}
-if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawn,spawnOne,pickKind,update,FL:FLAVORS,gameOver,hitJunk,TOPS,get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
+try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(()=>{drawIcons();resize();warmBanner(G.mi)})}catch(e){}
+if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawn,spawnOne,pickKind,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
 requestAnimationFrame(frame);
 })();
 </script>
