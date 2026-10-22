@@ -35,17 +35,17 @@ body{
   margin:0;position:relative;overflow:hidden;
   background:var(--ink);color:var(--cream);
   font-family:var(--body);font-weight:700;
-  touch-action:none;overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-font-smoothing:antialiased;
+  touch-action:pan-y;overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%;-webkit-font-smoothing:antialiased;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
 }
-#cv{position:absolute;top:0;left:0;right:0;bottom:0;inset:0;width:100%;height:100%;display:block;-webkit-user-drag:none}
+#cv{position:absolute;top:0;left:0;right:0;bottom:0;inset:0;width:100%;height:100%;display:block;-webkit-user-drag:none;touch-action:none}
 
 .ui{
   position:absolute;top:0;left:0;right:0;bottom:0;inset:0;display:flex;flex-direction:column;gap:12px;min-width:0;
   padding-top:max(12px,env(safe-area-inset-top,0px));padding-bottom:max(12px,env(safe-area-inset-bottom,0px));
   padding-left:max(16px,env(safe-area-inset-left,0px));
   padding-right:max(16px,env(safe-area-inset-right,0px));
-  pointer-events:none;
+  pointer-events:none;touch-action:none;
 }
 .ui[hidden]{display:none}
 
@@ -103,7 +103,7 @@ body{
 
 /* Start screen */
 .logo{
-  margin:3vh 0 0;font-family:var(--display);font-weight:400;text-align:center;
+  margin:calc(3vh + 6px) 0 0;font-family:var(--display);font-weight:400;text-align:center;
   font-size:clamp(64px,22vw,96px);line-height:.92;
 }
 .logo span{
@@ -138,13 +138,56 @@ body{
 .stat b{display:block;margin-top:4px;font-family:var(--display);font-weight:400;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
 .stat.new b{color:var(--gold)}
 
+/* corner icons, and the settings and patch notes panels */
+.corner{position:absolute;top:max(12px,env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));z-index:5;display:flex;gap:10px;pointer-events:none}
+.corner[hidden]{display:none}
+.icon-btn{
+  pointer-events:auto;position:relative;-webkit-appearance:none;appearance:none;width:42px;height:42px;padding:0;border-radius:50%;cursor:pointer;
+  display:grid;place-items:center;color:var(--cream);background:rgba(26,19,71,.78);border:2px solid rgba(255,246,228,.34);
+  box-shadow:0 3px 10px rgba(8,5,32,.3);transition:transform .08s,background .15s,color .15s;
+}
+.icon-btn[hidden]{display:none}
+.icon-btn:active{transform:scale(.93)}
+.icon-btn.on{background:var(--gold);color:var(--ink);border-color:var(--ink)}
+.icon-btn:focus-visible{outline:3px solid var(--cream);outline-offset:3px}
+.icon-btn .dot{position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:var(--berry);border:2px solid var(--ink)}
+.icon-btn .dot[hidden]{display:none}
+.panel{
+  z-index:3;pointer-events:auto;justify-content:flex-start;touch-action:pan-y;
+  padding-top:calc(max(12px,env(safe-area-inset-top,0px)) + 56px);
+  background:rgba(8,5,32,.66);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+}
+.panel[hidden]{display:none}
+.card{margin-top:0;min-height:0;max-height:100%;width:100%;max-width:440px;align-self:center}
+.panel-title{margin:0;font-family:var(--display);font-weight:400;font-size:32px;line-height:1;color:var(--gold);text-shadow:0 3px 0 var(--ink)}
+.panel-title small{font-family:var(--body);font-size:13px;font-weight:800;letter-spacing:.06em;color:var(--cream);opacity:.7;margin-left:8px;text-shadow:none}
+.scroll{overflow-y:auto;overflow-x:hidden;min-height:0;touch-action:pan-y;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin-right:-8px;padding-right:8px}
+.note{padding:12px 0;border-top:1.5px solid rgba(255,246,228,.14)}
+.note:first-child{border-top:0;padding-top:2px}
+.note header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.note h3{margin:0;font-size:16px;font-weight:800}
+.ver{font-family:var(--display);font-size:15px;color:var(--ink);background:var(--gold);border-radius:8px;padding:2px 7px 1px}
+.new{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--mint)}
+.note ul{margin:8px 0 0;padding-left:18px;display:grid;gap:5px;font-size:14px;line-height:1.35;font-weight:700}
+.setting{display:grid;gap:10px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:5px;border-radius:16px;background:rgba(255,246,228,.09)}
+.seg button{
+  -webkit-appearance:none;appearance:none;border:0;cursor:pointer;min-height:48px;border-radius:12px;color:var(--cream);background:transparent;
+  font-family:var(--display);font-size:20px;letter-spacing:.02em;
+}
+.seg button[aria-checked="true"]{background:var(--gold);color:var(--ink);box-shadow:0 3px 0 var(--gold-deep)}
+.seg button:disabled{opacity:.4;cursor:default}
+.seg button:focus-visible{outline:3px solid var(--cream);outline-offset:2px}
+.desc{margin:0;font-size:14px;line-height:1.4;opacity:.92}
+
 /* toppings strip on the start sheet */
 .tops{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0;padding:10px 4px 0;list-style:none;border-top:1.5px solid rgba(255,246,228,.14)}
 .tops li{display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center;font-size:12.5px;line-height:1.2;font-weight:700}
 .tops b{color:var(--gold);font-weight:800;font-size:13px}
 .tops .ico{width:40px;height:40px}
+@media (max-height:700px){.tops{display:none}}      /* short phones: the toppings are in the patch notes and obvious in play */
 
-@media (prefers-reduced-motion:reduce){.banner.show{animation:none;opacity:1}.toast{transition:none}.buff.low{animation:none}.life.gain{animation:none}}
+@media (prefers-reduced-motion:reduce){.banner.show{animation:none;opacity:1}.toast{transition:none}.buff.low{animation:none}.life.gain{animation:none}.icon-btn{transition:none}}
 </style>
 </head>
 <body>
@@ -199,6 +242,32 @@ body{
     <button class="btn" id="again" type="button">Scoop again</button>
   </section>
 </div>
+
+<div class="ui panel" id="notes" hidden role="dialog" aria-label="Patch notes">
+  <section class="sheet card">
+    <h2 class="panel-title">Patch notes<small id="verTag"></small></h2>
+    <div class="scroll" id="notesList"></div>
+  </section>
+</div>
+
+<div class="ui panel" id="settings" hidden role="dialog" aria-label="Settings">
+  <section class="sheet card">
+    <h2 class="panel-title">Settings</h2>
+    <div class="setting">
+      <span class="lbl" id="ctlLabel">Steering</span>
+      <div class="seg" role="radiogroup" aria-labelledby="ctlLabel">
+        <button type="button" role="radio" id="ctlTilt" aria-checked="false">Tilt</button>
+        <button type="button" role="radio" id="ctlTouch" aria-checked="false">Slide</button>
+      </div>
+      <p class="desc" id="ctlDesc"></p>
+    </div>
+  </section>
+</div>
+
+<div class="corner" id="corner" hidden>
+  <button class="icon-btn" id="btnSettings" type="button" aria-label="Settings" aria-expanded="false" aria-controls="settings" hidden><span class="ic"></span></button>
+  <button class="icon-btn" id="btnNotes" type="button" aria-label="Patch notes" aria-expanded="false" aria-controls="notes"><span class="ic"></span><span class="dot" id="notesDot" hidden></span></button>
+</div>
 <script>
 (()=>{
 'use strict';
@@ -242,6 +311,33 @@ const CONFIG={
     pointsPerScoop:10                        /* each burst scoop scores this times your multiplier (0 = no points) */
   }
 };
+
+/* ============================ PATCH NOTES ============================
+   Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
+const VERSION='1.5';
+const PATCH_NOTES=[
+  {v:'1.5',title:'Sauce, patch notes and settings',items:[
+    'Hot fudge and strawberry syrup now pour over the scoop they land on, with a glossy cap and drips.',
+    'New patch notes page. Tap the page icon in the corner to open it and tap it again to close it.',
+    'New settings on phones: choose Tilt or Slide steering. Your choice is remembered.',
+    'In Tilt mode your finger no longer moves the cone. Switch to Slide if you would rather steer by touch.']},
+  {v:'1.4',title:'Toppings',items:[
+    'New junk: pickle, anchovy, sardine, onion ring and a splat of mustard. Catching one still costs a life.',
+    'Hot fudge gives you a life back (up to 5). Strawberry syrup doubles your score for 8 seconds.',
+    'Cherries fall fast and are rare. Catch one for a 10-scoop burst while junk cannot touch you.',
+    'Fixed a freeze when you lost your last life while another object was still falling.']},
+  {v:'1.3',title:'Surprise spacing',items:[
+    'Things now fall in an uneven rhythm: singles, pairs, quick follow-ups and breathers. Junk is trickier to dodge.']},
+  {v:'1.2',title:'iPhone ready',items:[
+    'Works in Safari with tilt steering and sound, and no more pinch-zoom or page bounce.',
+    'Add it to your Home Screen to play it like an app.']},
+  {v:'1.1',title:'A steadier stack',items:[
+    'The first scoop locks to the cone and the rest of the stack sways gently as one column. Nothing topples.',
+    'Speeds ramp up more slowly and the climb to space takes longer.']},
+  {v:'1.0',title:'First scoop',items:[
+    'Steer the cone, stack the scoops, and climb from blue sky to deep space.',
+    'Same flavor in a row raises your multiplier, gold scoops add 5, and junk costs a life.']}
+];
 
 const $=s=>document.querySelector(s);
 const cv=$('#cv'),ctx=cv.getContext('2d');
@@ -357,6 +453,53 @@ function paintScoop(g,f,cx,cy,r){
   lip();g.lineWidth=1.6;g.strokeStyle=edge;g.stroke();
   g.beginPath();g.moveTo(-1.02*r,top);g.quadraticCurveTo(0,top-.22*r,1.02*r,top);
   g.strokeStyle='rgba(26,19,71,.22)';g.lineWidth=1.3;g.stroke();
+  g.restore();
+}
+
+
+/* ---------- sauce: what hot fudge and strawberry syrup leave on the scoop they land on ----------
+   A glossy cap poured over the dome with drips running down past the ruffled lip. Drawn as its own layer per
+   flavor (it has to follow that flavor's dome outline) and stamped on top of the scoop. */
+function paintCoat(g,kind,f,cx,cy,r){
+  const rn=seeded(f.id.charCodeAt(0)*977+f.id.length*31),j=()=>(rn()-.5)*.13*r;
+  const a=[j(),j(),j(),j(),j(),j(),j(),j(),j()];                    /* the same dome outline paintScoop drew (keep in step with it) */
+  const fud=kind==='fudge';
+  const P=fud?{hi:'#5e3018',mid:'#3b1a0b',lo:'#210d04',line:'rgba(20,8,2,.85)',gloss:'rgba(255,232,205,.8)'}
+             :{hi:'#ff6384',mid:'#e8264f',lo:'#ac1238',line:'rgba(78,4,26,.8)',gloss:'rgba(255,255,255,.85)'};
+  g.save();g.translate(cx,cy);g.lineJoin='round';g.lineCap='round';
+  const dome=()=>{
+    g.beginPath();g.moveTo(-1.06*r,.22*r);
+    g.bezierCurveTo(-1.16*r+a[0],-.66*r+a[1],-.66*r+a[2],-1.13*r+a[3],a[4]*.5,-1.1*r+a[5]);
+    g.bezierCurveTo(.66*r+a[6],-1.13*r+a[7],1.16*r+a[8],-.66*r+a[1],1.06*r,.22*r);
+    g.closePath();
+  };
+  const yb=x=>-.5*r+Math.sin(x/r*4.2+1.2)*.08*r+Math.sin(x/r*9.5+.3)*.035*r;       /* wavy lower edge of the cap: the lower dome keeps its flavor color */
+  const cap=()=>{g.beginPath();g.moveTo(-1.5*r,-1.5*r);for(let x=-1.5*r;x<=1.5*r+.1;x+=.1*r)g.lineTo(x,yb(x));g.lineTo(1.5*r,-1.5*r);g.closePath()};
+  const D=[[-.7,.5,.22],[-.22,.8,.25],[.32,.4,.21],[.76,.64,.23]];                  /* x, how far down, width (in scoop radii) */
+  const drip=([xr,er,wr])=>{
+    const X=xr*r,W=wr*r,y0=yb(X)-.14*r,y1=er*r;
+    g.beginPath();g.moveTo(X-W/2,y0);g.lineTo(X-W/2,y1-W/2);g.arc(X,y1-W/2,W/2,Math.PI,0,true);g.lineTo(X+W/2,y0);g.closePath();
+  };
+  /* outlines first, fills second, so the cap and its drips read as one poured shape */
+  g.strokeStyle=P.line;g.lineWidth=3.4;
+  g.save();dome();g.clip();cap();g.stroke();g.restore();
+  D.forEach(d=>{drip(d);g.stroke()});
+  const fg=g.createLinearGradient(0,-1.1*r,0,1.05*r);fg.addColorStop(0,P.hi);fg.addColorStop(.38,P.mid);fg.addColorStop(1,P.lo);
+  g.fillStyle=fg;
+  g.save();dome();g.clip();cap();g.fill();
+  g.fillStyle=P.gloss;                                                               /* shine on the dome */
+  g.beginPath();g.ellipse(-.5*r,-.82*r,.3*r,.1*r,-.45,0,TAU);g.fill();
+  g.beginPath();g.arc(-.1*r,-.95*r,.05*r,0,TAU);g.fill();
+  g.globalAlpha=.35;g.beginPath();g.ellipse(.45*r,-.66*r,.2*r,.06*r,.35,0,TAU);g.fill();g.globalAlpha=1;
+  if(!fud){                                                                          /* strawberry seeds */
+    const sr=seeded(77);g.fillStyle='rgba(255,228,120,.92)';
+    for(let i=0;i<9;i++){g.beginPath();g.ellipse((sr()*1.7-.85)*r,(-1+sr()*.7)*r,1.7,1.1,sr()*3,0,TAU);g.fill()}
+  }
+  g.restore();
+  g.fillStyle=fg;D.forEach(d=>{drip(d);g.fill()});
+  g.strokeStyle=P.gloss;g.lineWidth=1.8;g.globalAlpha=.7;                            /* a glint down the side of each drip */
+  D.forEach(([xr,er,wr])=>{const X=xr*r,W=wr*r;g.beginPath();g.moveTo(X-W*.2,yb(X)+.1*r);g.lineTo(X-W*.2,er*r-W*.8);g.stroke()});
+  g.globalAlpha=1;
   g.restore();
 }
 
@@ -535,13 +678,22 @@ const SPW=R*3.1,SPH=R*2.8,SCX=SPW/2,SCY=R*1.35,SS=3,JW=R*2.8;
 function canvasFor(w,h){const c=document.createElement('canvas');c.width=Math.ceil(w*SS);c.height=Math.ceil(h*SS);const g=c.getContext('2d');g.scale(SS,SS);return[c,g]}
 const SPR={};
 [...FLAVORS,GOLD].forEach(f=>{const[c,g]=canvasFor(SPW,SPH);paintScoop(g,f,SCX,SCY,R);SPR[f.id]=c});
+const COAT={fudge:{},syrup:{}};
+['fudge','syrup'].forEach(k=>[...FLAVORS,GOLD].forEach(f=>{const[c,g]=canvasFor(SPW,SPH);paintCoat(g,k,f,SCX,SCY,R);COAT[k][f.id]=c}));
 const JSPR=JUNK.map(fn=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);fn(g,R);return c});
 const TSPR={};
 Object.keys(TOPS).forEach(k=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);TOPS[k](g,R);TSPR[k]=c});
 
-function stampScoop(g,f,x,y,sq=0,rot=0,s=1){
+function stampScoop(g,f,x,y,sq=0,rot=0,s=1,coat=null){
   g.save();g.translate(x,y);if(rot)g.rotate(rot);g.scale((1+sq*.12)*s,(1-sq*.12)*s);
-  g.drawImage(SPR[f.id],-SCX,-SCY,SPW,SPH);g.restore();
+  g.drawImage(SPR[f.id],-SCX,-SCY,SPW,SPH);
+  if(coat){                                    /* the sauce is poured on: it spreads down from the top of the dome with a little overshoot */
+    const u=Math.min(1,coat.t),p=1+2.4*Math.pow(u-1,3)+1.4*Math.pow(u-1,2);
+    g.globalAlpha=Math.min(1,u*7);
+    g.translate(0,-1.1*R);g.scale(1,Math.max(.05,p));g.translate(0,1.1*R);
+    g.drawImage(COAT[coat.k][f.id],-SCX,-SCY,SPW,SPH);
+  }
+  g.restore();
 }
 function stampJunk(g,type,x,y,rot,s=1){
   g.save();g.translate(x,y);g.rotate(rot);g.scale(s,s);g.drawImage(JSPR[type],-JW/2,-JW/2,JW,JW);g.restore();
@@ -751,7 +903,7 @@ function milestone(){
   for(const m of MILE){if(n>=m.n&&G.ms<m.n){G.ms=m.n;banner(m.t)}}
 }
 function debrisFrom(s,i,vx0=0){
-  debris.push({f:s.f,x:s.px,y:sy(centerH(i)),vx:vx0+rnd(-130,130),vy:rnd(-420,-200),rot:0,vr:rnd(-6,6)});
+  debris.push({f:s.f,x:s.px,y:sy(centerH(i)),vx:vx0+rnd(-130,130),vy:rnd(-420,-200),rot:0,vr:rnd(-6,6),coat:s.coat?{k:s.coat.k,t:1}:null});
 }
 function hitJunk(it){
   G.lives--;G.mult=1;G.grace=false;G.lastFlavor=null;
@@ -775,18 +927,24 @@ function gameOver(){
 }
 
 /* ---------- toppings ---------- */
+function coatTop(kind){                    /* fudge and syrup pour over the scoop they land on */
+  const n=stack.length;if(!n)return;
+  const s=stack[n-1],y=sy(centerH(n-1))-(s.dy||0);
+  s.coat={k:kind,t:0};s.sqv=Math.max(s.sqv,9);
+  spark(s.px,y-R*.5,kind==='fudge'?['#3b1a0b','#5e3018','#8a5a3a','#ffffff']:['#e8264f','#ff6384','#ffb3cc','#ffffff'],16,210,.75,4.5);
+}
 function catchTopping(it){
   const k=it.kind,x=it.x,y=it.y;
   if(k==='fudge'){
     if(G.lives<CONFIG.lives.max){G.lives++;pop('+1 life',x,y-32,'#ff9ec0',30)}
     else if(CONFIG.fudge.pointsAtMax>0){const p=CONFIG.fudge.pointsAtMax*syrupMult();G.score+=p;pop('+'+p,x,y-32,'#ff9ec0',28)}
     spark(x,y,['#5a2f1a','#86492a','#ff5a7e','#ffffff'],20,270,.75,4);
-    ring(x,y,'#ff8fb0');sfxFudge();
+    ring(x,y,'#ff8fb0');coatTop('fudge');sfxFudge();
   }else if(k==='syrup'){
     G.syrupT=CONFIG.syrup.duration;          /* catching another while it runs just refills the timer */
     pop(CONFIG.syrup.multiplier+'x score!',x,y-32,'#ffb3cc',30);
     spark(x,y,['#ff7aa6','#ffb3cc','#ffffff'],24,300,.8,4);ring(x,y,'#ff9ec0');
-    flashC='255,140,180';G.flash=Math.max(G.flash,.16);sfxSyrup();
+    flashC='255,140,180';G.flash=Math.max(G.flash,.16);coatTop('syrup');sfxSyrup();
   }else if(k==='cherry')burstStart(it);
 }
 
@@ -926,6 +1084,7 @@ function updateStack(dt){
     s.px=cone.x+Tower.off(i,n)+jx;           /* scoop 0 is always exactly on the cone */
     s.jx=jx*Math.exp(-dt*(s.jr||16));        /* a fresh scoop settles into the column */
     s.sqv+=(-180*s.sq-14*s.sqv)*dt;s.sq+=s.sqv*dt;
+    if(s.coat&&s.coat.t<1)s.coat.t=Math.min(1,s.coat.t+dt/.5);
     if(s.dy>0){                              /* a burst scoop dropping into place */
       s.dv+=3600*dt;s.dy-=s.dv*dt;
       if(s.dy<=0){s.dy=0;s.sqv=Math.max(s.sqv,12);if(i>0)stack[i-1].sqv+=4;burstLand(s,i)}
@@ -1014,10 +1173,10 @@ function update(dt){
 }
 
 /* ---------- starting and resetting ---------- */
-function menuDemo(){
+function menuDemo(k=3){                      /* the demo cone on the start screen: fewer scoops when the screen is short */
   items=[];debris=[];parts=[];pops=[];Tower.reset();
   cone.x=W/2;cone.v=0;cone.af=0;G.cam=-G.menuLift;G.alt=0;
-  stack=[FLAVORS[0],FLAVORS[3],FLAVORS[1]].map(f=>({f,jx:0,px:cone.x,sq:0,sqv:0}));
+  stack=[FLAVORS[0],FLAVORS[3],FLAVORS[1]].slice(0,k).map(f=>({f,jx:0,px:cone.x,sq:0,sqv:0}));
 }
 function startGame(){
   stack=[];items=[];debris=[];parts=[];pops=[];Tower.reset();
@@ -1108,7 +1267,7 @@ function drawTower(g){
     const s=stack[i],y0=sy(centerH(i));
     if(y0<-70||y0>H+70)continue;
     const y=y0-(s.dy||0);
-    stampScoop(g,s.f,s.px,y,s.sq);
+    stampScoop(g,s.f,s.px,y,s.sq,0,1,s.coat);
     if(s.f===GOLD)sparkle(g,s.px+Math.cos(G.t*2+i)*R*.6,y+Math.sin(G.t*2.6+i)*R*.5,4+2*Math.sin(G.t*5+i),G.t);
   }
   if(n&&G.state==='play'&&G.mult>1&&!G.burst){
@@ -1149,7 +1308,7 @@ function drawItems(g){
     }
   }
 }
-function drawDebris(g){for(const d of debris)stampScoop(g,d.f,d.x,d.y,0,d.rot)}
+function drawDebris(g){for(const d of debris)stampScoop(g,d.f,d.x,d.y,0,d.rot,1,d.coat)}
 function drawParts(g){
   for(const p of parts){
     const a=clamp(p.l/p.m,0,1);
@@ -1269,11 +1428,16 @@ async function enableTilt(){
   }catch(e){Tilt.state='denied';return false}
 }
 
-/* ---------- steering: tilt, finger drag, or arrow keys ---------- */
+/* ---------- steering: tilt or slide (your choice in settings), plus arrow keys ----------
+   In Tilt mode the phone steers and touches are ignored. If the phone has no usable tilt signal, sliding still works as a backup. */
+const IS_TOUCH=matchMedia('(pointer:coarse)').matches,HAS_TILT='DeviceOrientationEvent' in window;
+const Settings={controls:HAS_TILT&&IS_TOUCH?'tilt':'touch'};
+try{const v=localStorage.getItem('scooper.controls');if(v==='tilt'||v==='touch')Settings.controls=v}catch(e){}
+const tiltLive=()=>Tilt.bound&&Tilt.neutral!==null&&performance.now()-Tilt.last<500;
 const Input={ptr:null,startX:0,startCone:0,l:false,r:false};
 function steerTarget(dt){
   if(Input.ptr!==null)return cone.target;
-  if(Tilt.bound&&Tilt.neutral!==null&&performance.now()-Tilt.last<500){
+  if(Settings.controls==='tilt'&&tiltLive()){
     cone.target=W/2+clamp((Tilt.v-Tilt.neutral)/TILT_RANGE,-1,1)*(W/2-M);
     return cone.target;
   }
@@ -1283,6 +1447,7 @@ function steerTarget(dt){
 }
 addEventListener('pointerdown',e=>{
   if(G.state!=='play'||(e.target.closest&&e.target.closest('button')))return;
+  if(Settings.controls==='tilt'&&tiltLive())return;           /* Tilt mode: the phone steers, not your finger */
   Input.ptr=e.pointerId;Input.startX=e.clientX;Input.startCone=cone.x;cone.target=cone.x;
   try{e.target.setPointerCapture(e.pointerId)}catch(err){}   /* keep the drag if the pointer leaves the window */
 });
@@ -1292,13 +1457,14 @@ addEventListener('pointermove',e=>{
 });
 const pUp=e=>{if(e.pointerId===Input.ptr)Input.ptr=null};
 addEventListener('pointerup',pUp);addEventListener('pointercancel',pUp);
-document.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});   /* no page bounce or pull-to-refresh in Safari */
+document.addEventListener('touchmove',e=>{if(e.target.closest&&e.target.closest('.scroll'))return;e.preventDefault()},{passive:false});   /* no page bounce or pull-to-refresh in Safari */
 document.addEventListener('gesturestart',e=>e.preventDefault());                /* no pinch-zoom in Safari */
 addEventListener('blur',()=>{Input.l=Input.r=false;Input.ptr=null});
 addEventListener('keydown',e=>{
   if(e.key==='ArrowLeft'||e.key==='a')Input.l=true;
   else if(e.key==='ArrowRight'||e.key==='d')Input.r=true;
-  else if((e.key==='Enter'||e.key===' ')&&e.target===document.body&&G.state!=='play'){e.preventDefault();begin()}
+  else if(e.key==='Escape')showPanel(null);
+  else if((e.key==='Enter'||e.key===' ')&&e.target===document.body&&G.state!=='play'&&!openPanel){e.preventDefault();begin()}
 });
 addEventListener('keyup',e=>{
   if(e.key==='ArrowLeft'||e.key==='a')Input.l=false;
@@ -1308,7 +1474,7 @@ addEventListener('keyup',e=>{
 /* ---------- interface ---------- */
 const el={score:$('#score'),height:$('#height'),lives:$('#lives'),toast:$('#toast'),banner:$('#banner'),recenter:$('#recenter'),
   menu:$('#menu'),over:$('#over'),hud:$('#hud'),hint:$('#hint'),buff:$('#buff'),buffBar:$('#buffBar'),buffTxt:$('#buffTxt'),buffX:$('#buffX')};
-let hs=-1,hn=-1,hl=-1,toastT=0,buffOn=false,buffS=-1;
+let hs=-1,hn=-1,hl=-1,toastT=0,buffOn=false,buffS=-1,cornerOn=null;
 function buildLives(){                          /* one slot per possible life; empty slots show room for hot fudge */
   const slots=Math.max(CONFIG.lives.max,CONFIG.lives.start),perRow=slots<=3?slots:Math.ceil(slots/2);
   el.lives.style.maxWidth=(perRow*26+(perRow-1)*6)+'px';
@@ -1326,6 +1492,8 @@ function hudUpdate(){
     });
     hl=G.lives;
   }
+  const showCorner=G.state==='menu'||(G.state==='over'&&G.overShown);       /* the icons live on the start and game-over screens */
+  if(showCorner!==cornerOn){cornerOn=showCorner;$('#corner').hidden=!showCorner;if(!showCorner)showPanel(null)}
   const on=G.state==='play'&&G.syrupT>0;                     /* strawberry syrup timer */
   if(on!==buffOn){buffOn=on;el.buff.hidden=!on;buffS=-1}
   if(on){
@@ -1354,7 +1522,8 @@ function showOver(){
 }
 function begin(){
   audioInit();
-  enableTilt();                              /* must be called inside the tap on iPhone */
+  showPanel(null);
+  if(Settings.controls==='tilt')enableTilt();   /* must be called inside the tap on iPhone */
   startGame();
   el.menu.hidden=true;el.over.hidden=true;el.hud.hidden=false;
   hs=hn=hl=-1;buffOn=false;buffS=-1;el.buff.hidden=true;el.height.textContent='0 scoops';
@@ -1363,6 +1532,7 @@ function begin(){
 }
 function tiltNotice(k){
   if(G.state!=='play')return;
+  if(Settings.controls==='touch'){el.recenter.hidden=true;toast(IS_TOUCH?'Slide your finger left and right to steer.':'Drag or use the arrow keys to steer.');return}
   if(Tilt.state==='asking'&&k<10){setTimeout(()=>tiltNotice(k+1),1500);return}   /* Safari's Allow dialog is still open */
   if(Tilt.seen&&performance.now()-Tilt.last<1000){el.recenter.hidden=false;toast('Tilt is on. Tip your phone left and right.')}
   else{
@@ -1371,6 +1541,69 @@ function tiltNotice(k){
       :matchMedia('(pointer:coarse)').matches?'No tilt signal here. Drag anywhere to steer.':'Drag or use the arrow keys to steer.',4200);
   }
 }
+/* ---------- corner icons, patch notes and settings ---------- */
+const ICON=(()=>{
+  const wrap=d=>'<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
+  const pts=[];
+  for(let k=0;k<8;k++){const b=k*Math.PI/4;[[-.24,7.4],[-.14,10],[.14,10],[.24,7.4]].forEach(([a,r])=>pts.push((12+Math.cos(b+a)*r).toFixed(2)+' '+(12+Math.sin(b+a)*r).toFixed(2)))}
+  return{gear:wrap('<path d="M'+pts.join('L')+'Z"/><circle cx="12" cy="12" r="3.2"/>'),
+    notes:wrap('<path d="M6.5 3h8l4 4v14h-12z"/><path d="M14.5 3v4h4"/><path d="M9 12h6M9 16h6"/>'),
+    close:wrap('<path d="M6 6l12 12M18 6L6 18"/>')};
+})();
+const panels={notes:$('#notes'),settings:$('#settings')},pbtn={notes:$('#btnNotes'),settings:$('#btnSettings')};
+let openPanel=null,notesSeen='';
+try{notesSeen=localStorage.getItem('scooper.notesSeen')||''}catch(e){}
+function showPanel(name){                   /* the icon of the open panel turns into an X: tap it again to close */
+  openPanel=name||null;
+  for(const k in panels){
+    const on=k===openPanel;
+    panels[k].hidden=!on;pbtn[k].classList.toggle('on',on);pbtn[k].setAttribute('aria-expanded',on);
+    pbtn[k].querySelector('.ic').innerHTML=on?ICON.close:(k==='notes'?ICON.notes:ICON.gear);
+  }
+  if(openPanel==='notes'){
+    $('#notesList').scrollTop=0;notesSeen=VERSION;$('#notesDot').hidden=true;
+    try{localStorage.setItem('scooper.notesSeen',VERSION)}catch(e){}
+  }
+  if(openPanel==='settings')refreshSettings();
+}
+pbtn.notes.addEventListener('click',()=>showPanel(openPanel==='notes'?null:'notes'));
+pbtn.settings.addEventListener('click',()=>showPanel(openPanel==='settings'?null:'settings'));
+for(const k in panels)panels[k].addEventListener('click',e=>{if(e.target===panels[k])showPanel(null)});   /* tap the dim backdrop to close */
+pbtn.settings.hidden=!IS_TOUCH;             /* the steering setting is for phones */
+$('#notesDot').hidden=notesSeen===VERSION;
+$('#verTag').textContent='v'+VERSION;
+$('#notesList').innerHTML=PATCH_NOTES.map((n,i)=>'<article class="note"><header><span class="ver">v'+n.v+'</span><h3>'+n.title+'</h3>'+(i===0?'<span class="new">Latest</span>':'')+'</header><ul>'+n.items.map(t=>'<li>'+t+'</li>').join('')+'</ul></article>').join('');
+
+const ctl={tilt:$('#ctlTilt'),touch:$('#ctlTouch'),desc:$('#ctlDesc')};
+ctl.tilt.disabled=!HAS_TILT;
+function ctlText(){
+  if(Settings.controls==='touch')return 'Put a finger anywhere on the screen and slide it left or right. The cone follows your finger.';
+  switch(Tilt.state){
+    case 'on':return 'Tilt is on. Tip your phone left and right to steer. Your finger will not move the cone in this mode.';
+    case 'asking':return 'Waiting for you to allow motion access...';
+    case 'denied':return 'Motion access was declined, so tilt cannot work. Reload and tap Allow, or use Slide. Sliding still works as a backup.';
+    case 'none':return 'This device has no tilt sensor, so sliding works instead.';
+    default:return 'Tip your phone left and right to steer. Your phone may ask to allow motion access.';
+  }
+}
+function refreshSettings(){
+  ctl.tilt.setAttribute('aria-checked',Settings.controls==='tilt');ctl.touch.setAttribute('aria-checked',Settings.controls==='touch');
+  ctl.desc.textContent=ctlText();refreshHint();
+}
+function setControls(mode){
+  Settings.controls=mode;
+  try{localStorage.setItem('scooper.controls',mode)}catch(e){}
+  if(mode==='tilt'&&!Tilt.bound){enableTilt().then(refreshSettings)}   /* called inside the tap, so iPhone can ask for motion access */
+  refreshSettings();
+}
+ctl.tilt.addEventListener('click',()=>setControls('tilt'));
+ctl.touch.addEventListener('click',()=>setControls('touch'));
+function refreshHint(){
+  el.hint.textContent=!IS_TOUCH?'Drag or use the arrow keys to steer. Phones can tilt.'
+    :Settings.controls==='tilt'?'Tilt your phone to steer.':'Slide your finger to steer.';
+}
+showPanel(null);refreshHint();
+
 /* numbers in the start sheet follow CONFIG */
 const WORDS=['no','one','two','three','four','five','six','seven','eight','nine','ten'];
 $('#lifeWord').textContent=WORDS[CONFIG.lives.start]||CONFIG.lives.start;
@@ -1380,9 +1613,15 @@ el.buffX.textContent=CONFIG.syrup.multiplier+'x';
 $('#play').addEventListener('click',begin);
 $('#again').addEventListener('click',begin);
 el.recenter.addEventListener('click',()=>{tiltCalibrate();toast('Tilt recentered.',1400)});
-if(!('DeviceOrientationEvent' in window)||!matchMedia('(pointer:coarse)').matches)el.hint.textContent='Drag or use the arrow keys to steer. Phones can tilt.';
 
 /* ---------- sizing and loop ---------- */
+let menuReady=false;
+function demoScoops(){
+  const sh=document.querySelector('#menu .sheet'),tg=document.querySelector('#menu .tag');
+  if(!sh||!tg||el.menu.hidden)return 3;
+  const avail=(sh.getBoundingClientRect().top-tg.getBoundingClientRect().bottom)/scale;   /* room between the tagline and the sheet */
+  return clamp(Math.floor((avail-100)/SP),0,3);
+}
 function resize(){
   const cw=Math.max(1,cv.clientWidth),ch=Math.max(1,cv.clientHeight);
   dpr=Math.min(2,window.devicePixelRatio||1);
@@ -1392,7 +1631,11 @@ function resize(){
   SB=Math.min(60,($('#safe')?$('#safe').offsetHeight:0)/scale);
   const sh=document.querySelector('#menu .sheet');
   G.menuLift=sh?Math.max(0,sh.offsetHeight/scale-34+10):0;
-  if(G.state==='menu'){cone.x=W/2;stack.forEach(s=>s.px=cone.x)}else cone.x=clamp(cone.x,M,W-M);
+  if(G.state==='menu'){
+    const k=demoScoops();                                    /* keep the demo stack clear of the title */
+    if(k!==stack.length&&typeof menuDemo==='function'&&menuReady)menuDemo(k);
+    cone.x=W/2;stack.forEach(s=>s.px=cone.x);
+  }else cone.x=clamp(cone.x,M,W-M);
 }
 let lastTs=0;
 function frame(ts){
@@ -1403,8 +1646,8 @@ function frame(ts){
 try{G.best=+localStorage.getItem('scooper.best')||0}catch(e){}
 resize();
 new ResizeObserver(resize).observe(cv);
-buildLives();menuDemo();drawIcons();
-try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(drawIcons)}catch(e){}
+buildLives();menuReady=true;menuDemo(demoScoops());drawIcons();
+try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(()=>{drawIcons();resize()})}catch(e){}
 if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawn,spawnOne,pickKind,update,FL:FLAVORS,gameOver,hitJunk,TOPS,get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
 requestAnimationFrame(frame);
 })();
