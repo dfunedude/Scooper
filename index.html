@@ -375,7 +375,8 @@ const CONFIG={
     reward:50,rewardInterval:.04             /* the gold cherry's payout, and seconds between those scoops */
   },
   music:{
-    volume:.3,                               /* loudness of the songs, 0 to 1 (the sound effects are not affected) */
+    volume:.1,                               /* loudness of the songs, 0 to 1. The sound effects are soft, so keep this low enough
+                                                for them to stand out (.1 puts the songs about level with the loudest catches) */
     fade:3                                   /* how quickly songs fade in and out: higher is faster (3 is about a second) */
   }
 };
@@ -392,8 +393,10 @@ const LEADERBOARD={
 
 /* ============================ PATCH NOTES ============================
    Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
-const VERSION='1.9';
+const VERSION='1.9.1';
 const PATCH_NOTES=[
+  {v:'1.9.1',title:'Quieter music',items:[
+    'The music now plays more quietly, so the sound effects come through clearly over it.']},
   {v:'1.9',title:'Music',items:[
     'Scooper has music! One song plays on the start and game-over screens and another while you play. The Sundae Zone still brings its own tune.',
     'Browsers only allow sound after a tap, so the music starts on your first tap.',
