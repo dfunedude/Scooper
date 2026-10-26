@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Scooper's online leaderboard. Paste this into Firestore > Rules and publish.
+// Each device owns one row in /scores, named by a random id the game makes on its first visit.
+// Anyone can read the board. A row can be created, and later updated only with an equal or higher score.
+// Nothing can be deleted from the game; remove rows by hand in the Firebase console.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function valid(d) {
+      return d.keys().hasAll(['name', 'score', 'tall', 'mult', 'v'])
+        && d.keys().hasOnly(['name', 'score', 'tall', 'mult', 'v'])
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 12
+        && d.score is int && d.score > 0 && d.score <= 1000000000
+        && d.tall is int && d.tall >= 0 && d.tall <= 100000
+        && d.mult is int && d.mult >= 0 && d.mult <= 100000
+        && d.v is string && d.v.size() <= 8;
+    }
+    match /scores/{player} {
+      allow read: if true;
+      allow create: if player.matches('^[a-z0-9]{16}$') && valid(request.resource.data);
+      allow update: if valid(request.resource.data)
+        && request.resource.data.score >= resource.data.score;
+      allow delete: if false;
+    }
+  }
+}

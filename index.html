@@ -179,10 +179,35 @@ body{
   -webkit-appearance:none;appearance:none;border:0;cursor:pointer;min-height:48px;border-radius:12px;color:var(--cream);background:transparent;
   font-family:var(--display);font-size:20px;letter-spacing:.02em;
 }
-.seg button[aria-checked="true"]{background:var(--gold);color:var(--ink);box-shadow:0 3px 0 var(--gold-deep)}
+.seg[hidden]{display:none}
+.seg button[aria-checked="true"],.seg button[aria-selected="true"]{background:var(--gold);color:var(--ink);box-shadow:0 3px 0 var(--gold-deep)}
 .seg button:disabled{opacity:.4;cursor:default}
 .seg button:focus-visible{outline:3px solid var(--cream);outline-offset:2px}
 .desc{margin:0;font-size:14px;line-height:1.4;opacity:.92}
+
+/* leaderboard */
+.field{
+  width:100%;min-width:0;min-height:48px;padding:10px 12px;border-radius:12px;border:2px solid rgba(255,246,228,.25);
+  background:rgba(255,246,228,.09);color:var(--cream);font:800 16px var(--body);
+  -webkit-user-select:text;user-select:text;-webkit-appearance:none;appearance:none;
+}
+.field::placeholder{color:rgba(255,246,228,.5)}
+.field:focus{outline:none;border-color:var(--gold)}
+.ranks{margin:0;padding:0;list-style:none;display:grid;gap:5px;align-content:start}
+.rk{display:grid;grid-template-columns:2.1em 1fr auto;align-items:center;gap:10px;padding:8px 12px 8px 8px;border-radius:12px;background:rgba(255,246,228,.07)}
+.rk .pos{font-family:var(--display);font-size:19px;text-align:center;color:rgba(255,246,228,.7)}
+.rk:nth-child(1) .pos{color:var(--gold)}
+.rk:nth-child(2) .pos{color:#d9e2f2}
+.rk:nth-child(3) .pos{color:#e8a36a}
+.rk .nm{min-width:0;font-size:15px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rk .nm small{display:block;font-size:12px;font-weight:700;opacity:.7}
+.rk .sc{font-family:var(--display);font-size:21px;font-variant-numeric:tabular-nums}
+.rk.me{background:rgba(255,207,74,.18);box-shadow:inset 0 0 0 2px var(--gold)}
+.empty{margin:0;padding:16px 4px;text-align:center;font-size:14px;line-height:1.4;opacity:.85}
+.post{display:flex;gap:8px}
+.post .chip{margin:0;flex:none;min-height:48px;padding:0 18px;font-size:15px;background:var(--gold);color:var(--ink);border-color:var(--ink)}
+.post[hidden],.rank[hidden]{display:none}
+.rank{margin:0;text-align:center;font-size:14px;line-height:1.35}
 
 /* toppings strip on the start sheet */
 .tops{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0;padding:10px 4px 0;list-style:none;border-top:1.5px solid rgba(255,246,228,.14)}
@@ -244,6 +269,8 @@ body{
       <div class="stat"><span class="lbl">Tallest stack</span><b id="oTall">0</b></div>
       <div class="stat"><span class="lbl">Best multiplier</span><b id="oMult">x1</b></div>
     </div>
+    <p class="rank" id="oRank" hidden role="status"></p>
+    <form class="post" id="post" hidden><input class="field" id="postName" maxlength="12" placeholder="Your name" autocomplete="nickname" enterkeyhint="send" spellcheck="false" aria-label="Your name for the leaderboard"><button class="chip" type="submit">Post</button></form>
     <button class="btn" id="again" type="button">Scoop again</button>
   </section>
 </div>
@@ -269,7 +296,20 @@ body{
   </section>
 </div>
 
+<div class="ui panel" id="board" hidden role="dialog" aria-label="Leaderboard">
+  <section class="sheet card">
+    <h2 class="panel-title">Leaderboard</h2>
+    <label class="setting"><span class="lbl">Your name</span><input class="field" id="boardName" maxlength="12" placeholder="Scooper" autocomplete="nickname" enterkeyhint="done" spellcheck="false"></label>
+    <div class="seg" role="tablist" id="boardTabs" hidden>
+      <button type="button" role="tab" id="tabAll" aria-selected="true" aria-controls="ranks">Everyone</button>
+      <button type="button" role="tab" id="tabMine" aria-selected="false" aria-controls="ranks">This device</button>
+    </div>
+    <div class="scroll"><ol class="ranks" id="ranks"></ol></div>
+  </section>
+</div>
+
 <div class="corner" id="corner" hidden>
+  <button class="icon-btn" id="btnBoard" type="button" aria-label="Leaderboard" aria-expanded="false" aria-controls="board"><span class="ic"></span></button>
   <button class="icon-btn" id="btnSettings" type="button" aria-label="Settings" aria-expanded="false" aria-controls="settings" hidden><span class="ic"></span></button>
   <button class="icon-btn" id="btnNotes" type="button" aria-label="Patch notes" aria-expanded="false" aria-controls="notes"><span class="ic"></span><span class="dot" id="notesDot" hidden></span></button>
 </div>
@@ -286,6 +326,8 @@ const CONFIG={
     start:150,                               /* fall speed with an empty cone */
     perScoop:2.6,                            /* extra speed for every scoop in the stack */
     max:470,                                 /* fastest normal fall speed */
+    perMult:.03,                             /* each step of multiplier above x1 makes new drops this much faster (.03 = 3%) */
+    multBoostMax:1.4,                        /* but the multiplier never makes them more than this many times faster */
     jitter:[.88,1.12]                        /* each object's speed is the base times a random number in this range */
   },
   drops:{                                    /* how often things arrive */
@@ -326,10 +368,23 @@ const CONFIG={
   }
 };
 
+/* ============================ LEADERBOARD ============================
+   Every device keeps its own top runs. To share one leaderboard between everyone who plays, make a free Firebase
+   project (steps in LEADERBOARD.md) and fill in its project ID and web API key here. Both are safe to publish:
+   the rules in firestore.rules decide what anyone can write. Leave them empty for an on-device board only. */
+const LEADERBOARD={
+  firebaseProject:'',                        /* e.g. 'scooper-12ab3' */
+  apiKey:'',                                 /* the web API key from the Firebase project settings */
+  top:25                                     /* how many runs the Everyone list shows */
+};
+
 /* ============================ PATCH NOTES ============================
    Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
-const VERSION='1.7';
+const VERSION='1.8';
 const PATCH_NOTES=[
+  {v:'1.8',title:'Faster streaks and a leaderboard',items:[
+    'Drops now speed up with your multiplier. Each step above x1 makes new drops 3% faster, up to 40%. Break the streak and they ease back. The Sundae Zone keeps its own beat.',
+    'New leaderboard behind the trophy icon, with your top 10 runs on this device. Set your name there too.']},
   {v:'1.7',title:'Ultimate Sundae Zone',items:[
     'A wormhole now hangs in the sky on the way up. Touch it with any part of your stack to warp into the Ultimate Sundae Zone.',
     'Inside, everything goes wavy and pixelated and the music kicks in. There is no junk, and every scoop falls on the beat covered in hot fudge or strawberry syrup.',
@@ -1202,6 +1257,8 @@ const GROUND=()=>H-34-SB;
 const sy=h=>GROUND()-h+G.cam;               /* world height to screen y */
 const centerH=i=>CH+14+i*SP;                 /* height of scoop i's center */
 const fallSpeed=n=>Math.min(CONFIG.fall.max,CONFIG.fall.start+n*CONFIG.fall.perScoop);   /* ramps up as the stack grows */
+const multBoost=()=>Math.min(CONFIG.fall.multBoostMax,1+(G.mult-1)*CONFIG.fall.perMult);   /* a big multiplier is worth more, so drops come faster */
+const dropSpeed=()=>fallSpeed(stack.length)*multBoost();   /* new drops only: things already falling keep their speed */
 const syrupMult=()=>G.syrupT>0?CONFIG.syrup.multiplier:1;     /* strawberry syrup doubles every point you earn */
 const shielded=()=>!!G.burst||G.shield>0;                      /* cherry burst: junk cannot hurt */
 
@@ -1270,6 +1327,7 @@ function gameOver(){
   stack.length=0;items.length=0;Tower.reset();settled=0;
   if(G.score>G.best){G.best=G.score;G.newBest=true;try{localStorage.setItem('scooper.best',String(G.best))}catch(e){}}
   else G.newBest=false;
+  Board.record(G.score,G.tall,G.bestMult);
 }
 
 /* ---------- toppings ---------- */
@@ -1541,7 +1599,7 @@ function spawnOne(kind,x,vy){
   const n=stack.length,baseVy=vy;
   let swA=n>10?rnd(0,Math.min(28,n*.6)):0;
   if(kind==='cherry'){                               /* noticeably faster than everything else, and it holds a straight line */
-    vy=Math.min(CONFIG.cherry.maxSpeed,fallSpeed(n)*CONFIG.cherry.speedMult);
+    vy=Math.min(CONFIG.cherry.maxSpeed,dropSpeed()*CONFIG.cherry.speedMult);
     x=clearLane(x);swA=0;sfxAlert();
   }
   let f=FLAVORS[(Math.random()*FLAVORS.length)|0];
@@ -1553,7 +1611,7 @@ function spawnOne(kind,x,vy){
 function spawn(mode){            /* mode: 'tight' trails the last object, 'pair' drops two side by side, else one */
   const n=stack.length,top=stack[n-1],prev=G.last,F=CONFIG.fall.jitter;
   const kind=pickKind(mode==='tight'?.1:0);          /* junk is likelier right behind another object */
-  let x,vy=fallSpeed(n)*rnd(F[0],F[1]);
+  let x,vy=dropSpeed()*rnd(F[0],F[1]);
   if(mode==='tight'&&prev){
     if(Math.random()<.35){x=prev.x+rnd(-22,22);vy=prev.vy*rnd(.98,1.02)}      /* same lane: holds its spacing */
     else x=prev.x+(Math.random()<.5?-1:1)*rnd(80,230);                         /* or a quick swing to the side */
@@ -1575,7 +1633,7 @@ function nextGap(mode){          /* seconds until the next object, and whether t
   const r=Math.random();
   if(r<(mode==='tight'?D.tightChainChance:D.tightChance)){
     G.tight=true;
-    return Math.max(base*rnd(.22,.42),MIN_SEP/fallSpeed(n));
+    return Math.max(base*rnd(.22,.42),MIN_SEP/dropSpeed());
   }
   const breather=(mode==='pair'?1.35:1)*(mode==='tight'?1.15:1);
   return base*breather*(r<.62?rnd(.74,1.07):rnd(1.2,1.76));
@@ -2223,7 +2281,10 @@ function hudUpdate(){
     hl=G.lives;
   }
   const showCorner=G.state==='menu'||(G.state==='over'&&G.overShown);       /* the icons live on the start and game-over screens */
-  if(showCorner!==cornerOn){cornerOn=showCorner;$('#corner').hidden=!showCorner;if(!showCorner)showPanel(null)}
+  if(showCorner!==cornerOn){
+    cornerOn=showCorner;$('#corner').hidden=!showCorner;if(!showCorner)showPanel(null);
+    el.lives.style.visibility=showCorner?'hidden':'';     /* the icons take that corner once the run is over */
+  }
   const on=G.state==='play'&&G.syrupT>0;                     /* strawberry syrup timer */
   if(on!==buffOn){buffOn=on;el.buff.hidden=!on;buffS=-1}
   if(on){
@@ -2258,6 +2319,7 @@ function showOver(){
   $('#oTall').textContent=G.tall+(G.tall===1?' scoop':' scoops');
   $('#oMult').textContent='x'+G.bestMult;
   $('#stScore').classList.toggle('new',!!G.newBest&&G.score>0);
+  overBoard();
   el.over.hidden=false;
 }
 function begin(){
@@ -2288,9 +2350,10 @@ const ICON=(()=>{
   for(let k=0;k<8;k++){const b=k*Math.PI/4;[[-.24,7.4],[-.14,10],[.14,10],[.24,7.4]].forEach(([a,r])=>pts.push((12+Math.cos(b+a)*r).toFixed(2)+' '+(12+Math.sin(b+a)*r).toFixed(2)))}
   return{gear:wrap('<path d="M'+pts.join('L')+'Z"/><circle cx="12" cy="12" r="3.2"/>'),
     notes:wrap('<path d="M6.5 3h8l4 4v14h-12z"/><path d="M14.5 3v4h4"/><path d="M9 12h6M9 16h6"/>'),
+    board:wrap('<path d="M7 4h10v4.5a5 5 0 0 1-10 0z"/><path d="M7 6H4.5a2.6 2.6 0 0 0 3.2 3.9M17 6h2.5a2.6 2.6 0 0 1-3.2 3.9"/><path d="M12 13.5V17M8.5 20.5h7M9.5 17h5v3.5h-5z"/>'),
     close:wrap('<path d="M6 6l12 12M18 6L6 18"/>')};
 })();
-const panels={notes:$('#notes'),settings:$('#settings')},pbtn={notes:$('#btnNotes'),settings:$('#btnSettings')};
+const panels={notes:$('#notes'),settings:$('#settings'),board:$('#board')},pbtn={notes:$('#btnNotes'),settings:$('#btnSettings'),board:$('#btnBoard')};
 let openPanel=null,notesSeen='';
 try{notesSeen=localStorage.getItem('scooper.notesSeen')||''}catch(e){}
 function showPanel(name){                   /* the icon of the open panel turns into an X: tap it again to close */
@@ -2298,16 +2361,16 @@ function showPanel(name){                   /* the icon of the open panel turns 
   for(const k in panels){
     const on=k===openPanel;
     panels[k].hidden=!on;pbtn[k].classList.toggle('on',on);pbtn[k].setAttribute('aria-expanded',on);
-    pbtn[k].querySelector('.ic').innerHTML=on?ICON.close:(k==='notes'?ICON.notes:ICON.gear);
+    pbtn[k].querySelector('.ic').innerHTML=on?ICON.close:k==='settings'?ICON.gear:ICON[k];
   }
   if(openPanel==='notes'){
     $('#notesList').scrollTop=0;notesSeen=VERSION;$('#notesDot').hidden=true;
     try{localStorage.setItem('scooper.notesSeen',VERSION)}catch(e){}
   }
   if(openPanel==='settings')refreshSettings();
+  if(openPanel==='board')showBoard(boardTab,true);
 }
-pbtn.notes.addEventListener('click',()=>showPanel(openPanel==='notes'?null:'notes'));
-pbtn.settings.addEventListener('click',()=>showPanel(openPanel==='settings'?null:'settings'));
+for(const k in pbtn)pbtn[k].addEventListener('click',()=>showPanel(openPanel===k?null:k));
 for(const k in panels)panels[k].addEventListener('click',e=>{if(e.target===panels[k])showPanel(null)});   /* tap the dim backdrop to close */
 pbtn.settings.hidden=!IS_TOUCH;             /* the steering setting is for phones */
 $('#notesDot').hidden=notesSeen===VERSION;
@@ -2343,6 +2406,135 @@ function refreshHint(){
     :Settings.controls==='tilt'?'Tilt your phone to steer.':'Slide your finger to steer.';
 }
 showPanel(null);refreshHint();
+
+/* ---------- leaderboard ----------
+   This device keeps its top 10 runs. With LEADERBOARD filled in, each device also owns one row in a shared Firestore
+   collection, named by a random id made on its first visit, and posts its best run (and your name) whenever they change.
+   It talks to Firestore's REST API directly, so no library is loaded. A post that fails is tried again later. */
+const Board=(()=>{
+  const L=LEADERBOARD,online=!!L.firebaseProject;
+  const base='https://firestore.googleapis.com/v1/projects/'+encodeURIComponent(L.firebaseProject)+'/databases/(default)/documents';
+  const key=L.apiKey?'?key='+encodeURIComponent(L.apiKey):'';
+  const load=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}};
+  const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+  const clean=s=>String(s||'').replace(/[\u0000-\u001f\u007f-\u009f<>]/g,'').replace(/\s+/g,' ').trim().slice(0,12);
+  let pid=load('scooper.pid','');
+  if(!/^[a-z0-9]{16}$/.test(pid)){
+    const b=new Uint8Array(16);
+    try{crypto.getRandomValues(b)}catch(e){for(let i=0;i<16;i++)b[i]=Math.random()*256}
+    pid=Array.from(b,x=>(x%36).toString(36)).join('');save('scooper.pid',pid);
+  }
+  let name=clean(load('scooper.name',''));
+  let runs=load('scooper.runs',[]);
+  runs=(Array.isArray(runs)?runs:[]).filter(r=>r&&r.s>0).slice(0,10);
+  const old=+load('scooper.best',0)||0;
+  if(old>0&&!runs.some(r=>r.s>=old)){        /* a best from before this list existed */
+    runs.push({n:name,s:old,t:0,m:0,d:0});runs.sort((a,b)=>b.s-a.s);runs.length=Math.min(runs.length,10);save('scooper.runs',runs);
+  }
+  let posted=load('scooper.posted',{s:0,n:''}),sending=null,cache=null;
+  const best=()=>runs[0]||null;
+  const due=()=>online&&!!name&&!!best()&&(best().s>posted.s||name!==posted.n);
+  function record(s,t,m){
+    if(s<=0)return;
+    runs.push({n:name,s,t,m,d:Date.now()});runs.sort((a,b)=>b.s-a.s);runs.length=Math.min(runs.length,10);
+    save('scooper.runs',runs);
+  }
+  async function call(url,body,method){
+    const ac=typeof AbortController==='function'?new AbortController():null,tm=ac?setTimeout(()=>ac.abort(),8000):0;
+    try{
+      const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal:ac?ac.signal:undefined});
+      if(!r.ok)throw new Error('leaderboard '+r.status);
+      return await r.json();
+    }finally{clearTimeout(tm)}
+  }
+  function post(){                           /* resolves once this device's best is on the board (or there was nothing new) */
+    if(!due())return Promise.resolve(false);
+    if(sending)return sending;
+    const r=best(),n=name,I=v=>({integerValue:String(Math.max(0,Math.round(v||0)))});
+    sending=call(base+'/scores/'+pid+key,{fields:{name:{stringValue:n},score:I(r.s),tall:I(r.t),mult:I(r.m),v:{stringValue:VERSION}}},'PATCH')
+      .then(()=>{posted={s:r.s,n};save('scooper.posted',posted);cache=null;return true})
+      .finally(()=>{sending=null});
+    return sending;
+  }
+  async function top(maxAge=30000){         /* opening the panel asks for a fresh list; flipping tabs reuses it */
+    if(cache&&Date.now()-cache.t<maxAge)return cache.rows;
+    const res=await call(base+':runQuery'+key,{structuredQuery:{from:[{collectionId:'scores'}],
+      orderBy:[{field:{fieldPath:'score'},direction:'DESCENDING'}],limit:L.top}},'POST');
+    const rows=(Array.isArray(res)?res:[]).filter(x=>x.document).map(x=>{
+      const f=x.document.fields||{},num=k=>f[k]?+(f[k].integerValue||f[k].doubleValue||0):0;
+      return{n:clean(f.name&&f.name.stringValue)||'Scooper',s:num('score'),t:num('tall'),me:x.document.name.endsWith('/'+pid)};
+    });
+    cache={t:Date.now(),rows};
+    return rows;
+  }
+  return{online,best,due,record,post,top,runs:()=>runs,get name(){return name},setName(n){name=clean(n);save('scooper.name',name);return name}};
+})();
+
+const bd={name:$('#boardName'),tabs:$('#boardTabs'),all:$('#tabAll'),mine:$('#tabMine'),list:$('#ranks'),rank:$('#oRank'),post:$('#post'),postName:$('#postName')};
+let boardTab=Board.online?'all':'mine',boardReq=0;
+bd.tabs.hidden=!Board.online;               /* with no online board there is only this device's list */
+bd.name.value=bd.postName.value=Board.name;
+const scoopsTxt=t=>t?t+(t===1?' scoop':' scoops'):'';
+function rankRows(rows,emptyMsg){             /* built from text nodes: names are whatever people typed */
+  bd.list.textContent='';
+  if(!rows.length){const li=document.createElement('li');li.className='empty';li.textContent=emptyMsg;bd.list.appendChild(li);return}
+  rows.forEach((r,i)=>{
+    const li=document.createElement('li'),pos=document.createElement('span'),nm=document.createElement('span'),sc=document.createElement('span');
+    li.className='rk'+(r.me?' me':'');pos.className='pos';nm.className='nm';sc.className='sc';
+    pos.textContent=i+1;nm.textContent=r.n;sc.textContent=r.s.toLocaleString();
+    if(r.sub){const sm=document.createElement('small');sm.textContent=r.sub;nm.appendChild(sm)}
+    li.append(pos,nm,sc);bd.list.appendChild(li);
+  });
+}
+async function showBoard(tab,fresh=false){
+  boardTab=tab;
+  bd.all.setAttribute('aria-selected',tab==='all');bd.mine.setAttribute('aria-selected',tab==='mine');
+  const req=++boardReq;
+  if(tab==='mine'){
+    const day=d=>d?new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';
+    rankRows(Board.runs().map(r=>({n:r.n||Board.name||'You',s:r.s,sub:[scoopsTxt(r.t),day(r.d)].filter(Boolean).join(' · ')})),
+      'No runs yet. Your top 10 will show up here.');
+    return;
+  }
+  rankRows([],'Loading...');
+  try{
+    await Board.post().catch(()=>{});      /* get your own best up first, so it shows */
+    const rows=await Board.top(fresh?0:30000);
+    if(req===boardReq)rankRows(rows.map(r=>({n:r.n,s:r.s,sub:scoopsTxt(r.t),me:r.me})),'No scores yet. Be the first!');
+  }catch(e){if(req===boardReq)rankRows([],'Could not reach the leaderboard. Check your connection and try again.')}
+}
+bd.all.addEventListener('click',()=>showBoard('all'));
+bd.mine.addEventListener('click',()=>showBoard('mine'));
+function nameChanged(v){
+  const n=Board.setName(v);bd.name.value=bd.postName.value=n;
+  if(openPanel==='board')showBoard(boardTab);
+  return n;
+}
+bd.name.addEventListener('change',()=>nameChanged(bd.name.value));
+bd.name.addEventListener('keydown',e=>{if(e.key==='Enter')bd.name.blur()});
+async function postNow(){                    /* on the game-over sheet: post, then say where you landed */
+  bd.rank.hidden=false;bd.rank.textContent='Posting your best...';
+  try{
+    await Board.post();
+    const rows=await Board.top(0),i=rows.findIndex(r=>r.me);
+    bd.rank.textContent=i>=0?'You are #'+(i+1)+' on the leaderboard!':rows.length?'Posted! #'+rows.length+' on the board has '+rows[rows.length-1].s.toLocaleString()+'.':'Posted!';
+  }catch(e){bd.rank.textContent='Could not reach the leaderboard. Your best will post next time.'}
+}
+function overBoard(){
+  bd.rank.hidden=true;bd.post.hidden=true;
+  if(!Board.online||!Board.best())return;
+  if(!Board.name){                           /* a new best and no name yet: ask for one */
+    if(G.newBest&&G.score>0){bd.rank.hidden=false;bd.rank.textContent='New best! Add your name to post it to the leaderboard.';bd.post.hidden=false}
+    return;
+  }
+  if(Board.due())postNow();
+}
+bd.post.addEventListener('submit',e=>{
+  e.preventDefault();
+  if(!nameChanged(bd.postName.value)){bd.postName.focus();return}
+  bd.post.hidden=true;bd.postName.blur();postNow();
+});
+setTimeout(()=>{if(Board.due())Board.post().catch(()=>{})},3000);   /* a post that failed earlier goes up now */
 
 /* numbers in the start sheet follow CONFIG */
 const WORDS=['no','one','two','three','four','five','six','seven','eight','nine','ten'];
