@@ -75,6 +75,21 @@ body{
 .buff .bt{min-width:2ch;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--cream)}
 .buff.low{animation:buffLow .55s ease-in-out infinite}
 @keyframes buffLow{50%{opacity:.45}}
+/* Ultimate Sundae Zone: one pip per scoop that falls in the zone */
+.zmeter{
+  align-self:center;display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 14px 8px;border-radius:16px;
+  background:rgba(26,19,71,.9);border:2px solid var(--gold);box-shadow:0 0 0 3px rgba(255,111,159,.55),0 0 20px rgba(255,207,74,.4);
+}
+.zmeter[hidden]{display:none}
+.zmeter .zt{font-family:var(--display);font-size:16px;letter-spacing:.05em;line-height:1;color:var(--gold);text-shadow:0 2px 0 var(--ink);white-space:nowrap}
+.zmeter .zt b{font-family:var(--body);font-weight:800;font-size:14px;letter-spacing:0;color:var(--cream);margin-left:6px}
+.zpips{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;max-width:250px}
+.zpips i{width:11px;height:11px;border-radius:50%;border:2px solid rgba(255,246,228,.4)}
+.zpips i.g0{border-color:var(--gold)}
+.zpips i.fudge{background:#6b381c;border-color:var(--cream)}
+.zpips i.syrup{background:#ff3f6f;border-color:var(--cream)}
+.zpips i.gold{background:var(--gold);border-color:var(--cream);box-shadow:0 0 8px rgba(255,207,74,.9)}
+.zpips i.miss{background:#ff5b5b;border-color:#ffd0d0}
 .chip{
   pointer-events:auto;-webkit-appearance:none;appearance:none;border:2px solid rgba(255,246,228,.3);cursor:pointer;
   font:800 13px var(--body);letter-spacing:.04em;color:var(--cream);
@@ -194,6 +209,7 @@ body{
     <button class="chip" id="recenter" type="button" hidden>Recenter tilt</button>
     <div class="lives" id="lives" aria-label="Lives left"></div>
   </div>
+  <div class="zmeter" id="zmeter" hidden><span class="zt">Sundae Zone<b id="ztxt"></b></span><span class="zpips" id="zpips"></span></div>
   <div class="toast" id="toast" role="status"></div>
 </div>
 <div class="banner" id="banner" aria-live="polite"></div>
@@ -298,13 +314,27 @@ const CONFIG={
     burstScoops:10,burstInterval:.1,         /* scoops it adds, and seconds between them */
     shieldAfter:.8,                          /* seconds of junk immunity after the burst finishes */
     pointsPerScoop:10                        /* each burst scoop scores this times your multiplier (0 = no points) */
+  },
+  zone:{                                     /* the Ultimate Sundae Zone, behind the wormhole */
+    first:35,                                /* the first wormhole hangs at this stack height */
+    every:80,                                /* each later one opens this many scoops above the last */
+    scoops:14,morePerZone:2,maxScoops:22,    /* scoops that fall inside: catch every one to win */
+    fall:250,fallPerZone:15,fallMax:330,     /* one fall speed for every scoop in the zone, so they keep the beat */
+    beat:.4,                                 /* seconds per beat: scoops land on the beat */
+    catchWidth:1.45,                         /* a bit more forgiving than plain scoops (1.3) */
+    reward:50,rewardInterval:.04             /* the gold cherry's payout, and seconds between those scoops */
   }
 };
 
 /* ============================ PATCH NOTES ============================
    Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
-const VERSION='1.6';
+const VERSION='1.7';
 const PATCH_NOTES=[
+  {v:'1.7',title:'Ultimate Sundae Zone',items:[
+    'A wormhole now hangs in the sky on the way up. Touch it with any part of your stack to warp into the Ultimate Sundae Zone.',
+    'Inside, everything goes wavy and pixelated and the music kicks in. There is no junk, and every scoop falls on the beat covered in hot fudge or strawberry syrup.',
+    'Catch every scoop to win the gold cherry. It floats down and pulls itself onto your stack, then pays out 50 scoops at once.',
+    'Miss one and the zone closes. Another wormhole opens higher up.']},
   {v:'1.6',title:'Higher and smoother',items:[
     'Fixed the stutter when a new height level is announced. Steering stays smooth while the banner is on screen.',
     'Eight new height levels after Ice cream galaxy, then endless light-years beyond.',
@@ -649,7 +679,7 @@ const TOPS={
     g.beginPath();g.moveTo(-r*.2,-r*.62);g.lineTo(-r*.09,-r*1.04);g.lineTo(r*.09,-r*1.04);g.lineTo(r*.2,-r*.62);g.closePath();g.fill();g.stroke();
     rr(g,-r*.26,-r*.72,r*.52,r*.17,3);g.fill();g.stroke();
   },
-  cherry(g,r){                                /* a pair of cherries on one stem */
+  cherry(g,r,P=['#ff8a9c','#e8203f','#9c0f2b']){   /* a pair of cherries on one stem (the zone's gold cherry passes a gold palette) */
     g.lineJoin='round';g.lineCap='round';
     const cs=[[-r*.42,r*.4,r*.46],[r*.42,r*.5,r*.5]],tx=0,ty=-r*.95;
     cs.forEach(([x,y,rad])=>{g.beginPath();g.moveTo(x,y-rad*.9);g.quadraticCurveTo(x*.4,-r*.3,tx,ty)});
@@ -660,7 +690,7 @@ const TOPS={
     g.fill();g.lineWidth=1.9;g.strokeStyle=INK;g.stroke();
     cs.forEach(([x,y,rad])=>{
       const gr=g.createRadialGradient(x-rad*.35,y-rad*.4,rad*.1,x,y,rad*1.05);
-      gr.addColorStop(0,'#ff8a9c');gr.addColorStop(.35,'#e8203f');gr.addColorStop(1,'#9c0f2b');
+      gr.addColorStop(0,P[0]);gr.addColorStop(.35,P[1]);gr.addColorStop(1,P[2]);
       g.beginPath();g.arc(x,y,rad,0,TAU);g.fillStyle=gr;g.fill();g.lineWidth=2.4;g.strokeStyle=INK;g.stroke();
       g.fillStyle='rgba(255,255,255,.8)';g.beginPath();g.ellipse(x-rad*.36,y-rad*.4,rad*.22,rad*.12,-.6,0,TAU);g.fill();
     });
@@ -677,6 +707,7 @@ const COAT={fudge:{},syrup:{}};
 const JSPR=JUNK.map(fn=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);fn(g,R);return c});
 const TSPR={};
 Object.keys(TOPS).forEach(k=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);TOPS[k](g,R);TSPR[k]=c});
+const GCH=(()=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);TOPS.cherry(g,R,['#fffbe0','#ffd54d','#b9770a']);return c})();   /* the gold cherry */
 
 function stampScoop(g,f,x,y,sq=0,rot=0,s=1,coat=null){
   g.save();g.translate(x,y);if(rot)g.rotate(rot);g.scale((1+sq*.12)*s,(1-sq*.12)*s);
@@ -699,7 +730,7 @@ function mkGlow(rgb){
   gr.addColorStop(0,'rgba('+rgb+',.85)');gr.addColorStop(.5,'rgba('+rgb+',.32)');gr.addColorStop(1,'rgba('+rgb+',0)');
   g.fillStyle=gr;g.fillRect(0,0,GW,GW);return c;
 }
-const GLOWS={shield:mkGlow('190,244,255'),syrup:mkGlow('255,110,165'),top:mkGlow('255,240,170')};
+const GLOWS={shield:mkGlow('190,244,255'),syrup:mkGlow('255,110,165'),top:mkGlow('255,240,170'),gold:mkGlow('255,207,74')};
 function stampTop(g,kind,x,y,rot,s=1){
   g.save();g.translate(x,y);if(rot)g.rotate(rot);g.scale(s,s);g.drawImage(TSPR[kind],-JW/2,-JW/2,JW,JW);g.restore();
 }
@@ -1044,6 +1075,89 @@ function drawSpace(g,fade){
   g.globalAlpha=1;
 }
 
+/* ---------- the Ultimate Sundae Zone: art ----------
+   The wormhole is one image painted at load and spun as it is drawn. Inside the zone the backdrop is a pixel-art
+   wallpaper of ice cream slot symbols: the game's own sprites drawn tiny, snapped to hard pixels and outlined in ink.
+   Each frame it is laid row by row into a small buffer, every row nudged on a sine wave, and the buffer is blown up
+   with smoothing off, so it reads like an old 16-bit battle backdrop. */
+const HW=170,HR=60;                                 /* wormhole image size, and the radius of its disc */
+const HOLE=(()=>{
+  const c=document.createElement('canvas');c.width=c.height=HW*2;        /* 2x is plenty: it is drawn rotated every frame */
+  const g=c.getContext('2d');g.scale(2,2);g.translate(HW/2,HW/2);
+  let gr=g.createRadialGradient(0,0,HR*.7,0,0,HW/2);gr.addColorStop(0,'rgba(255,122,198,.6)');gr.addColorStop(1,'rgba(255,122,198,0)');
+  g.fillStyle=gr;g.beginPath();g.arc(0,0,HW/2,0,TAU);g.fill();
+  gr=g.createRadialGradient(0,0,0,0,0,HR);gr.addColorStop(0,'#04010c');gr.addColorStop(.3,'#1d0a45');gr.addColorStop(.72,'#6a2bb4');gr.addColorStop(1,'#ff86c8');
+  g.fillStyle=gr;g.beginPath();g.arc(0,0,HR,0,TAU);g.fill();
+  g.save();g.clip();g.lineCap='round';
+  const th=(a,u)=>a*TAU/5+u*5.2,rad=u=>HR*Math.pow(1-u,1.25);
+  for(let a=0;a<5;a++)for(let j=0;j<36;j++){        /* five arms of flavor spiralling down the drain */
+    const u0=j/36,u1=(j+1)/36;
+    g.beginPath();g.moveTo(Math.cos(th(a,u0))*rad(u0),Math.sin(th(a,u0))*rad(u0));g.lineTo(Math.cos(th(a,u1))*rad(u1),Math.sin(th(a,u1))*rad(u1));
+    g.globalAlpha=.85*(1-u0)+.1;g.lineWidth=9*(1-u0)+1;g.strokeStyle=SPRINK[a];g.stroke();
+  }
+  g.globalAlpha=1;
+  const rn=seeded(321);
+  for(let i=0;i<22;i++){const t=rn()*TAU,d=HR*(.3+rn()*.62);g.save();g.translate(Math.cos(t)*d,Math.sin(t)*d);g.rotate(t+1.2);rr(g,-1.4,-3.6,2.8,7.2,1.4);g.fillStyle=SPRINK[i%5];g.fill();g.restore()}
+  gr=g.createRadialGradient(0,0,0,0,0,HR*.42);gr.addColorStop(0,'rgba(2,0,8,1)');gr.addColorStop(1,'rgba(2,0,8,0)');
+  g.fillStyle=gr;g.fillRect(-HR,-HR,2*HR,2*HR);
+  g.restore();
+  g.lineWidth=3;g.strokeStyle='rgba(255,236,170,.9)';g.beginPath();g.arc(0,0,HR,0,TAU);g.stroke();
+  g.lineWidth=1.5;g.strokeStyle='rgba(26,19,71,.6)';g.beginPath();g.arc(0,0,HR+2.2,0,TAU);g.stroke();
+  return c;
+})();
+const ZPX=3,ZC=22;                                  /* one art pixel is ZPX logical px; the wallpaper is cut into ZC-pixel cells */
+const ZPAL=[[[46,10,92],[150,38,132]],[[14,22,78],[28,120,132]],[[62,10,56],[168,86,40]],[[26,10,80],[92,68,188]]];   /* top and bottom colors it drifts through */
+let ZT=null;
+function zoneTile(){                                /* made the first time you warp in, when the fonts are surely loaded */
+  if(ZT)return ZT;
+  const cols=4,rows=2,w=cols*ZC,h=rows*ZC;
+  const mk=()=>{const c=document.createElement('canvas');c.width=w;c.height=h;return[c,c.getContext('2d')]};
+  const[ic,q]=mk();
+  const cone=(x,y,f)=>{
+    q.fillStyle='#e8b06a';q.beginPath();q.moveTo(x-6,y+1);q.lineTo(x+6,y+1);q.lineTo(x,y+11);q.closePath();q.fill();
+    q.fillStyle='#a8692b';[[-3,3],[1,3],[-1,6],[3,5]].forEach(([dx,dy])=>q.fillRect(x+dx,y+dy,1,1));
+    stampScoop(q,f,x,y-2,0,0,.22);
+  };
+  const seven=(x,y)=>{q.font=DFONT(19);q.textAlign='center';q.textBaseline='middle';q.fillStyle='#ff4f8b';q.fillText('7',x,y+1)};
+  const art=[
+    (x,y)=>cone(x,y-2,FLAVORS[0]),(x,y)=>stampTop(q,'cherry',x,y,0,.32),(x,y)=>cone(x,y-2,FLAVORS[1]),seven,
+    seven,(x,y)=>stampScoop(q,GOLD,x,y+3,0,0,.3),(x,y)=>cone(x,y-2,FLAVORS[4]),(x,y)=>stampTop(q,'cherry',x,y,0,.32)
+  ];
+  art.forEach((fn,i)=>fn((i%cols+.5)*ZC,((i/cols|0)+.5)*ZC));
+  /* hard pixels: alpha snaps to on or off, and every empty pixel touching the art turns ink */
+  const d=q.getImageData(0,0,w,h),p=d.data,on=new Uint8Array(w*h);
+  for(let i=0;i<w*h;i++){on[i]=p[i*4+3]>100?1:0;p[i*4+3]=on[i]*255}
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=y*w+x;if(on[i])continue;
+    if((x>0&&on[i-1])||(x<w-1&&on[i+1])||(y>0&&on[i-w])||(y<h-1&&on[i+w])){p[i*4]=26;p[i*4+1]=19;p[i*4+2]=71;p[i*4+3]=255}
+  }
+  q.putImageData(d,0,0);
+  const[sc,sg]=mk(),sd=sg.createImageData(w,h);                   /* a dark silhouette for the drop shadow */
+  for(let i=0;i<w*h;i++){sd.data[i*4]=10;sd.data[i*4+2]=30;sd.data[i*4+3]=p[i*4+3]?120:0}
+  sg.putImageData(sd,0,0);
+  const[c,g]=mk();
+  for(let cy=0;cy<rows;cy++)for(let cx=0;cx<cols;cx++){   /* a checkerboard under the symbols, with a gold stud at each corner */
+    g.fillStyle=(cx+cy)%2?'rgba(20,0,40,.28)':'rgba(255,255,255,.1)';g.fillRect(cx*ZC,cy*ZC,ZC,ZC);
+    g.fillStyle='#ffd54d';g.fillRect(cx*ZC,cy*ZC-1,1,3);g.fillRect(cx*ZC-1,cy*ZC,3,1);
+  }
+  g.drawImage(sc,1,1);g.drawImage(ic,0,0);
+  return ZT=c;
+}
+let holeSign=null;
+function paintHoleSign(){                           /* the marquee over the wormhole, painted once at screen resolution */
+  const k=dpr*scale,text='ULTIMATE SUNDAE ZONE',fs=16;
+  MEAS.font=DFONT(fs);
+  const w=Math.ceil(MEAS.measureText(text).width)+36,h=32;
+  const c=document.createElement('canvas');c.width=Math.ceil(w*k);c.height=Math.ceil(h*k);
+  const g=c.getContext('2d');g.scale(k,k);
+  rr(g,2,2,w-4,h-4,13);g.fillStyle='rgba(26,19,71,.92)';g.fill();g.lineWidth=2.5;g.strokeStyle='#ffcf4a';g.stroke();
+  for(let x=10,i=0;x<w-8;x+=11,i++){g.fillStyle=i%2?'#ff7aa6':'#fff7c2';g.fillRect(x-1.2,4.6,2.4,2.4);g.fillRect(x-1.2,h-7,2.4,2.4)}
+  g.font=DFONT(fs);g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';
+  g.lineWidth=4;g.strokeStyle=INK;g.strokeText(text,w/2,h/2+1);g.fillStyle='#ffcf4a';g.fillText(text,w/2,h/2+1);
+  c.lw=w;c.lh=h;
+  return c;
+}
+
 /* ---------- tower sway ----------
    The first scoop is locked to the cone. Everything above it leans together as one
    slightly bendy column: sliding the cone pushes the column the other way, and it eases
@@ -1076,7 +1190,7 @@ const Tower=(()=>{
 /* ---------- game state ---------- */
 const G={state:'menu',t:0,score:0,best:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,cam:0,alt:0,
   shake:0,flash:0,menuLift:0,spawnT:1,junkRun:0,last:null,tight:false,bestMult:1,tall:0,overT:0,overShown:false,mi:0,frame:0,
-  syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0}};
+  syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0},hole:null,zone:null,zoneN:0,whiteout:0};
 const cone={x:195,v:0,af:0,target:195};
 let stack=[],items=[],debris=[],parts=[],pops=[];
 const MILE=[{n:12,t:'Cloud nine'},{n:28,t:'Stratosphere'},{n:45,t:'Orbit'},{n:65,t:'Deep space'},{n:90,t:'Ice cream galaxy'},
@@ -1113,6 +1227,7 @@ function landScoop(it,dx){
   const pts=10*G.mult*syrupMult();G.score+=pts;G.bestMult=Math.max(G.bestMult,G.mult);
   Tower.resize(n,n+1);
   const sc={f:gold?GOLD:it.f,jx:0,px:it.x,sq:0,sqv:11};
+  if(it.coat)sc.coat={k:it.coat.k,t:.6};    /* zone scoops arrive sauced: the coat just wobbles as it lands */
   stack.push(sc);
   sc.jx=it.x-(cone.x+Tower.off(n,n+1));
   Tower.kick(dx*.9*n/(n+5));
@@ -1150,7 +1265,7 @@ function zapJunk(it){                      /* the cherry shield: junk fizzles in
 }
 function gameOver(){
   G.state='over';G.overT=0;G.overShown=false;
-  G.burst=null;G.shield=0;G.syrupT=0;
+  G.burst=null;G.shield=0;G.syrupT=0;G.zone=null;G.hole=null;
   for(let i=lowVisible(stack.length);i<stack.length;i++)debrisFrom(stack[i],i);   /* scoops below the screen just go */
   stack.length=0;items.length=0;Tower.reset();settled=0;
   if(G.score>G.best){G.best=G.score;G.newBest=true;try{localStorage.setItem('scooper.best',String(G.best))}catch(e){}}
@@ -1184,12 +1299,14 @@ function catchTopping(it){
    To keep the tower stable the sway is held at rest for the whole burst (adding height would otherwise multiply
    the lean and slam into its limit), and the lean the tower already had is handed to the scoops so it glides
    out instead of snapping. New scoops inherit the glide of the scoop beneath them, so the column never kinks. */
-function burstStart(it){
-  const n=stack.length;
+function burstStart(it,gold=false){          /* gold: the zone's jackpot, a much bigger and faster burst */
+  const n=stack.length,C=CONFIG.cherry,Z=CONFIG.zone;
   for(let i=0;i<n;i++){const s=stack[i];s.jx=(s.jx||0)+Tower.off(i,n);s.jr=5}
   Tower.reset();
-  G.burst={left:CONFIG.cherry.burstScoops,t:0,k:(Math.random()*FLAVORS.length)|0,count:0,pts:0,last:null};
+  G.burst={left:gold?Z.reward:C.burstScoops,t:gold?.4:0,iv:gold?Z.rewardInterval:C.burstInterval,gold,
+    k:(Math.random()*FLAVORS.length)|0,count:0,pts:0,last:null};
   G.shield=0;
+  if(gold)return;                             /* the jackpot brings its own fanfare */
   banner('Cherry burst!');
   spark(it.x,it.y,['#ff5a78','#ff9ab0','#ffffff','#ffd54d'],26,340,.8,4);ring(it.x,it.y,'#ff7a96');
   flashC='255,110,150';G.flash=Math.max(G.flash,.2);sfxBurstStart();
@@ -1198,6 +1315,7 @@ function burstScoop(b){
   const n=stack.length,below=stack[n-1];
   const f=FLAVORS[b.k%FLAVORS.length];b.k++;
   const sc={f,jx:below?below.jx||0:0,jr:below?below.jr||16:16,px:below?below.px:cone.x,sq:0,sqv:0,dy:130,dv:260,bi:b.count++};   /* starts exactly over the scoop below */
+  if(b.gold){sc.jp=true;sc.coat={k:sc.bi%2?'syrup':'fudge',t:0}}   /* the jackpot pours a whole sundae */
   stack.push(sc);
   const pts=CONFIG.cherry.pointsPerScoop*G.mult*syrupMult();
   if(pts>0){G.score+=pts;b.pts+=pts}
@@ -1206,8 +1324,8 @@ function burstScoop(b){
 }
 function burstLand(s,i){                    /* the scoop touches down: a little sparkle and a note */
   const y=sy(centerH(i));
-  spark(s.px,y,[s.f.c,s.f.h,'#ffffff'],8,230,.55,4);ring(s.px,y,'#ffffffcc');
-  sfxBurst(s.bi);
+  spark(s.px,y,[s.f.c,s.f.h,'#ffffff'],s.jp?5:8,230,.55,4);ring(s.px,y,s.jp?'#ffd54d':'#ffffffcc');
+  if(s.jp)sfxCoin(s.bi);else sfxBurst(s.bi);
 }
 function burstEnd(b){
   const C=CONFIG.cherry,n=stack.length,top=stack[n-1];
@@ -1215,6 +1333,13 @@ function burstEnd(b){
   G.lastFlavor=b.last;G.grace=true;         /* the next catch keeps your multiplier, whatever the flavor */
   milestone();
   const x=top?top.px:cone.x,y=sy(centerH(n-1))-R-34;
+  if(b.gold){
+    pop(b.pts>0?'ULTIMATE! +'+b.pts.toLocaleString():'ULTIMATE!',x,y,'#ffcf4a',34);
+    spark(x,y+30,SPRINK,44,440,1,4.5);ring(x,y+30,'#ffd54d');ring(x,y+30,'#ff7aa6');
+    G.shake=Math.max(G.shake,reduce?0:.35);sfxCherry();
+    if(G.zone){G.zone.phase='out';G.zone.outT=0}
+    return;
+  }
   pop(b.pts>0?'CHERRY! +'+b.pts.toLocaleString():'CHERRY!',x,y,'#ff8fa6',32);
   spark(x,y+30,['#ff5a78','#ffd54d','#ffffff','#ff9ab0'],34,380,.9,4);ring(x,y+30,'#ffd54d');
   G.shake=Math.max(G.shake,reduce?0:.3);G.flash=Math.max(G.flash,.25);flashC='255,214,120';sfxCherry();
@@ -1223,8 +1348,157 @@ function burstStep(dt){
   const b=G.burst;
   Tower.reset();                             /* hold the tower upright while it grows */
   b.t-=dt;
-  while(b.left>0&&b.t<=0){burstScoop(b);b.left--;b.t+=CONFIG.cherry.burstInterval}
+  while(b.left>0&&b.t<=0){burstScoop(b);b.left--;b.t+=b.iv}
   if(b.left<=0)burstEnd(b);
+}
+
+/* ---------- the Ultimate Sundae Zone ----------
+   A wormhole hangs at a fixed height in the world and scrolls into view from the top as the stack climbs. If any scoop
+   touches it you warp in: whatever was falling is swallowed, the world goes wavy and pixelated, and a little casino
+   loop plays. No junk falls in the zone. Every scoop comes sauced, all at one speed, each landing on a beat, and the
+   gap between two scoops grows with how far the cone has to travel, so a whole run is always catchable. Catch them
+   all and a gold cherry floats down, homes in on the top scoop whatever you do, and pays out a 50-scoop burst.
+   Miss one and the zone closes. Either way the next wormhole opens higher up. */
+const makeHole=n=>({n,u:rnd(.2,.8),r:HR,seen:false});            /* n: the stack height it hangs at. u: across the play width */
+const holeX=h=>lerp(HR+8,W-HR-8,h.u);
+let zoneKnown=false;
+try{zoneKnown=!!localStorage.getItem('scooper.zone')}catch(e){}
+function holeStep(){
+  const h=G.hole;if(!h)return;
+  const hh=centerH(h.n),y=sy(hh),x=holeX(h);
+  if(!h.seen&&y>-h.r-60){
+    h.seen=true;sfxHole();warmZone();
+    if(!zoneKnown)toast('A wormhole! Touch it with your stack.',3600);
+  }
+  if(y>H+h.r+80){G.hole=makeHole(h.n+CONFIG.zone.every);return}   /* passed it by: the next one opens higher up */
+  if(G.burst||y>H+20)return;
+  const n=stack.length,reach=h.r+R;                              /* any scoop touching the disc counts */
+  const i0=Math.max(lowVisible(n),Math.floor((hh-reach-CH-14)/SP)),i1=Math.min(n-1,Math.ceil((hh+reach-CH-14)/SP));
+  for(let i=i0;i<=i1;i++){
+    const dx=stack[i].px-x,dy=centerH(i)-hh;
+    if(dx*dx+dy*dy<reach*reach){zoneStart(h);return}
+  }
+}
+function warmZone(){
+  setTimeout(()=>{try{paintBanner('Ultimate Sundae Zone','Catch every scoop!');paintBanner('Perfect!','Here comes the gold cherry');
+    paintBanner('JACKPOT!','+'+CONFIG.zone.reward+' scoops');paintBanner('So close!','Catch every scoop to win');zoneTile()}catch(e){}},250);
+}
+/* figures the scoops fall in, as positions across the play width (0 to 1), given where the last one was */
+const ZPATS=[
+  u=>[u,u,u],                                                               /* three down one lane */
+  u=>{const d=u<.5?1:-1;return[1,2,3,4,5].map(i=>u+d*i*.16)},              /* a sweep across */
+  u=>{const a=u<.5?.1:.9;return[a,1-a,a,1-a]},                             /* side to side */
+  ()=>{const p=rnd(0,TAU);return[0,1,2,3,4,5].map(i=>.5+.38*Math.sin(p+i*.9))},   /* a wave */
+  ()=>[.5,.34,.66,.18,.82],                                                 /* fanning out from the middle */
+  u=>{const d=u<.5?1:-1;return[0,0,1,1,2,2].map(i=>u+d*i*.28)}             /* steps: two in each lane */
+];
+function zoneSeq(total,k){                   /* where each scoop falls, and the beat it lands on */
+  const L=R+18,span=W-2*L,fast=1+Math.min(k,4)*.06;                      /* later zones ask for quicker moves */
+  const out=[];
+  let u=clamp((cone.x-L)/span,0,1),beat=8,last=-1;                       /* the first one lands 8 beats in, near the cone */
+  while(out.length<total){
+    let p;do p=(Math.random()*ZPATS.length)|0;while(p===last);last=p;
+    for(let nu of ZPATS[p](u)){
+      if(out.length>=total)break;
+      nu=clamp(nu,0,1);
+      if(out.length){const dx=Math.abs(nu-u)*span;beat+=dx<=70*fast?1:dx<=190*fast?2:3}
+      out.push({x:L+nu*span,beat,k:out.length%2?'syrup':'fudge'});u=nu;
+    }
+    beat+=1;                                                               /* a breath between figures */
+  }
+  out[out.length-1].gold=true;                                             /* the last one is a gold scoop */
+  return out;
+}
+function zoneStart(h){
+  const C=CONFIG.zone,k=G.zoneN++,x=holeX(h),hh=centerH(h.n),y=sy(hh);
+  const total=Math.min(C.maxScoops,C.scoops+k*C.morePerZone);
+  G.hole=null;
+  G.zone={phase:'in',t:0,hx:x,hh,seq:zoneSeq(total,k),i:0,total,caught:0,missed:false,won:false,
+    v:Math.min(C.fallMax,C.fall+k*C.fallPerZone),flavor:G.lastFlavor||FLAVORS[(Math.random()*FLAVORS.length)|0],   /* one flavor: catch them all for a long streak */
+    bn:0,nb:0,gc:null,ct:0,rays:0,outT:0};
+  for(const it of items)spark(it.x,it.y,SPRINK,6,200,.5,3.5);           /* whatever was falling is swallowed by the wormhole */
+  items.length=0;G.last=null;G.tight=false;
+  spark(x,y,SPRINK,40,420,.9,4.5);ring(x,y,'#ff7aa6');ring(x,y,'#72e6c3');
+  flashC='255,140,220';G.flash=Math.max(G.flash,.5);G.shake=Math.max(G.shake,reduce?0:.35);
+  banner('Ultimate Sundae Zone','Catch every scoop!');
+  sfxZoneIn();
+  if(!zoneKnown){zoneKnown=true;try{localStorage.setItem('scooper.zone','1')}catch(e){}}
+}
+function zoneDrop(z,i){
+  const s=z.seq[i],x=clamp(s.x,R+10,W-R-10);
+  items.push({kind:s.gold?'gold':'scoop',f:z.flavor,bx:x,x,y:-R*2-10,vy:z.v,vx:0,rot:0,vr:0,sw:rnd(0,TAU),swA:0,
+    type:0,bounced:false,age:0,zone:true,coat:{k:s.k,t:1}});
+}
+const zoneLive=z=>z&&!z.missed&&(z.phase==='in'||z.phase==='play');
+function zoneCatch(){
+  const z=G.zone;if(!zoneLive(z))return;
+  if(++z.caught<z.total)return;
+  z.phase='cherry';z.ct=0;                   /* every one caught */
+  banner('Perfect!','Here comes the gold cherry');sfxPerfect();
+}
+function zoneMiss(it){
+  const z=G.zone;if(!zoneLive(z))return;
+  z.missed=true;z.phase='out';z.outT=0;      /* the zone closes; anything still falling can be caught as a plain scoop */
+  pop('Missed!',it.x,Math.min(it.y,H-90)-24,'#ff8f8f',30);
+  banner('So close!','Catch every scoop to win');sfxZoneMiss();
+}
+function goldCherryStep(z,dt){              /* floats down slowly, then a magnet pulls it to the top scoop: it cannot be missed */
+  z.ct+=dt;
+  const n=stack.length,top=stack[n-1],tx=top?top.px:cone.x,ty=n?sy(centerH(n-1))-R*.5:sy(CH);
+  if(!z.gc){
+    if(z.ct<.6)return;
+    z.gc={x:tx<W/2?W*.82:W*.18,y:-30,t:0,k:0};sfxGoldCherry();           /* starts on the far side, so the pull runs diagonally */
+  }
+  const c=z.gc;c.t+=dt;
+  c.k=clamp((c.t-1.4)/1.1,0,1);
+  const dx=tx-c.x,dy=ty-c.y,d=Math.hypot(dx,dy)||1,sp=Math.min(950,140+c.t*300);
+  if(d<R*.9||(c.k>.5&&sp*dt>=d)||c.t>7){jackpot(tx,ty);return}
+  c.x+=lerp(Math.sin(c.t*2.4)*36,dx/d*sp,c.k)*dt;
+  c.y+=lerp(lerp(160,60,clamp(c.t/1.4,0,1)),dy/d*sp,c.k)*dt;   /* drifts in past the score, slowing like a feather */
+  if(Math.random()<dt*24)spark(c.x+rnd(-8,8),c.y+rnd(-8,8),['#ffd54d','#fff7c2','#ffffff'],1,50,.7,3.5,-30);
+}
+function jackpot(x,y){
+  const z=G.zone;
+  z.phase='jackpot';z.gc=null;z.rays=.001;z.won=true;
+  G.whiteout=reduce?.5:1.2;                  /* a white flash frame, then it fades */
+  G.shake=Math.max(G.shake,reduce?0:.5);
+  spark(x,y,[...SPRINK,'#ffffff'],60,520,1.1,5);ring(x,y,'#ffd54d');ring(x,y,'#ffffff');
+  banner('JACKPOT!','+'+CONFIG.zone.reward+' scoops');sfxJackpot();
+  burstStart({x,y},true);
+}
+const ZCH=[[0,4,7],[-3,0,4],[-7,-3,0],[-5,-1,2]];   /* G, E minor, C, D: semitones from G4 */
+function zoneBeat(z){                        /* the zone's music: an oom-pah casino loop in G, scheduled a hair ahead */
+  const B=CONFIG.zone.beat,f=s=>392*Math.pow(2,s/12);
+  while(z.nb<=z.t+.05){
+    const b=z.bn++,d=Math.max(0,z.nb-z.t),ch=ZCH[(b>>2)&3],up=(b>>1)&1?12:0;
+    tone(f(ch[0]-12+(b&1?7:0)),B*.42,'square',.03,0,d);
+    tone(f(ch[b%3]+up),B*.36,'triangle',.05,0,d);
+    tone(f(ch[(b+1)%3]+up),B*.36,'triangle',.04,0,d+B/2);
+    if(b&1)tone(2600,.03,'triangle',.02,0,d+B/2);
+    z.nb+=B;
+    if(!reduce)for(let i=lowVisible(stack.length);i<stack.length;i++)stack[i].sqv+=3;   /* the stack bobs to the beat */
+  }
+}
+function zoneStep(dt){
+  const z=G.zone,C=CONFIG.zone;
+  z.t+=dt;if(z.rays)z.rays+=dt;
+  if(z.phase==='out'){z.outT+=dt;if(z.outT>=.9)zoneEnd();return}
+  zoneBeat(z);
+  if(z.phase==='in'&&z.t>=.9)z.phase='play';
+  if(z.phase==='in'||z.phase==='play'){
+    const fall=(sy(centerH(stack.length))+R*2+10)/z.v;                  /* drop each one early enough to land on its beat */
+    while(z.i<z.seq.length&&z.t>=z.seq[z.i].beat*C.beat-fall)zoneDrop(z,z.i++);
+  }else if(z.phase==='cherry')goldCherryStep(z,dt);
+}
+function zoneEnd(){
+  G.zone=null;
+  G.hole=makeHole(stack.length+CONFIG.zone.every);
+  G.spawnT=.7;G.last=null;G.tight=false;
+}
+function zoneVis(z){                         /* how far the zone look is faded in */
+  if(!z)return 0;
+  const s=u=>{u=clamp(u,0,1);return u*u*(3-2*u)};
+  return z.phase==='in'?s((z.t-.3)/.6):z.phase==='out'?1-s(z.outT/.9):1;
 }
 
 /* ---------- spawning ----------
@@ -1339,11 +1613,11 @@ function coneStep(dt,desired){
   cone.v+=dv;cone.x=clamp(cone.x+cone.v*dt,M,W-M);
   cone.af+=((dv/dt)-cone.af)*Math.min(1,dt*28);
 }
-const reach=it=>it.kind==='junk'?R*1.1:it.kind==='cherry'?R*CONFIG.cherry.catchWidth:R*1.3;   /* how far off-center still counts as a catch */
+const reach=it=>it.zone?R*CONFIG.zone.catchWidth:it.kind==='junk'?R*1.1:it.kind==='cherry'?R*CONFIG.cherry.catchWidth:R*1.3;   /* how far off-center still counts as a catch */
 function playStep(dt){
   coneStep(dt,steerTarget(dt));
   const n=stack.length;
-  if(G.burst)Tower.reset();else Tower.step(n,cone.af,G.t,dt);
+  if(G.burst)Tower.reset();else Tower.step(n,G.zone?cone.af*.5:cone.af,G.t,dt);   /* the stack sways half as much in the zone */
   updateStack(dt);
 
   const S=G.since;S.fudge+=dt;S.syrup+=dt;S.cherry+=dt;
@@ -1354,10 +1628,14 @@ function playStep(dt){
     else if(n&&Math.random()<dt*7){const top=stack[n-1];spark(top.px+rnd(-22,22),sy(centerH(n-1))-R*.5,['#ff7aa6','#ffb3cc','#ffffff'],1,70,.9,3.5,-90)}
   }
 
-  G.spawnT-=dt;
-  if(G.spawnT<=0){
-    const mode=G.tight?'tight':(stack.length>=CONFIG.drops.calmStartScoops&&Math.random()<CONFIG.drops.pairChance?'pair':'single');
-    spawn(mode);G.spawnT=nextGap(mode);
+  if(!G.zone)holeStep();
+  if(G.zone)zoneStep(dt);                    /* the zone drops its own scoops */
+  else{
+    G.spawnT-=dt;
+    if(G.spawnT<=0){
+      const mode=G.tight?'tight':(stack.length>=CONFIG.drops.calmStartScoops&&Math.random()<CONFIG.drops.pairChance?'pair':'single');
+      spawn(mode);G.spawnT=nextGap(mode);
+    }
   }
 
   for(let k=items.length-1;k>=0;k--){
@@ -1369,20 +1647,22 @@ function playStep(dt){
     if(!it.bounced){
       const m=stack.length,tgtY=sy(centerH(m));      /* where the next scoop would rest */
       const above=it.y<tgtY,was=it.ab!==false;it.ab=above;
-      /* it crosses the line by falling through it, or (during a burst) because the tower rose up through it */
-      if((py<tgtY&&!above)||(G.burst&&was&&!above)){
+      /* it crosses the line by falling through it, or (during a burst, or for a zone scoop) because the tower rose up through it */
+      if((py<tgtY&&!above)||((G.burst||it.zone)&&was&&!above)){
         const topX=m?stack[m-1].px:cone.x,dx=it.x-topX,w=reach(it);
         if(Math.abs(dx)<w){
           if(it.kind==='junk'){if(shielded())zapJunk(it);else hitJunk(it)}
-          else if(it.kind==='scoop'||it.kind==='gold')landScoop(it,dx);
+          else if(it.kind==='scoop'||it.kind==='gold'){landScoop(it,dx);if(it.zone)zoneCatch()}
           else catchTopping(it);
           items.splice(k,1);
           if(G.state!=='play')break;
           continue;
-        }else if(Math.abs(dx)<w+R*.8){it.bounced=true;it.vx=Math.sign(dx||1)*rnd(170,260);it.vy*=.6}
+        }
+        if(it.zone)zoneMiss(it);
+        if(Math.abs(dx)<w+R*.8){it.bounced=true;it.vx=Math.sign(dx||1)*rnd(170,260);it.vy*=.6}
       }
     }
-    if(it.y>H+90||it.x<-90||it.x>W+90)items.splice(k,1);
+    if(it.y>H+90||it.x<-90||it.x>W+90){if(it.zone)zoneMiss(it);items.splice(k,1)}
   }
   if(G.burst)burstStep(dt);
 }
@@ -1400,9 +1680,9 @@ function overStep(dt){
 function commonStep(dt){
   const n=stack.length,hTop=n?centerH(n-1):CH;
   const want=G.state==='menu'?-G.menuLift:Math.max(0,hTop+34-.34*H);
-  G.cam+=(want-G.cam)*Math.min(1,dt*(want<G.cam?5:G.burst?6:3.2));   /* keep up with the burst */
+  G.cam+=(want-G.cam)*Math.min(1,dt*(want<G.cam?5:G.burst?(G.burst.gold?9:6):3.2));   /* keep up with the burst */
   G.alt+=(hTop-G.alt)*Math.min(1,dt*1.5);
-  G.shake=Math.max(0,G.shake-dt*2.2);G.flash=Math.max(0,G.flash-dt*1.6);
+  G.shake=Math.max(0,G.shake-dt*2.2);G.flash=Math.max(0,G.flash-dt*1.6);G.whiteout=Math.max(0,G.whiteout-dt*3.2);
   if(BAN.img&&(BAN.t+=dt)>=BAN.dur)BAN.img=null;
   for(let i=debris.length-1;i>=0;i--){const d=debris[i];d.vy+=1500*dt;d.x+=d.vx*dt;d.y+=d.vy*dt;d.rot+=d.vr*dt;if(d.y>H+120)debris.splice(i,1)}
   for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.l-=dt;if(p.l<=0){parts.splice(i,1);continue}if(!p.ring){p.vy+=p.g*dt;p.x+=p.vx*dt;p.y+=p.vy*dt}}
@@ -1424,7 +1704,7 @@ function startGame(){
   stack=[];items=[];debris=[];parts=[];pops=[];Tower.reset();settled=0;BAN.img=null;
   Object.assign(G,{state:'play',score:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,alt:0,spawnT:.9,junkRun:0,last:null,tight:false,
     bestMult:1,tall:0,mi:0,shake:0,flash:0,overT:0,overShown:false,newBest:false,
-    syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0}});
+    syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0},hole:makeHole(CONFIG.zone.first),zone:null,zoneN:0,whiteout:0});
   cone.x=W/2;cone.v=0;cone.af=0;cone.target=W/2;
   tiltCalibrate();warmBanner(0);
 }
@@ -1545,7 +1825,7 @@ function drawItems(g){
       sparkle(g,it.x-R*.85,it.y-R*.55+Math.sin(G.t*4+it.sw)*3,3.2,-G.t);
     }else{
       const gold=it.kind==='gold';
-      stampScoop(g,gold?GOLD:it.f,it.x,it.y,0,Math.sin(G.t*4+it.sw)*.1);
+      stampScoop(g,gold?GOLD:it.f,it.x,it.y,0,Math.sin(G.t*4+it.sw)*.1,1,it.coat);
       if(gold){
         sparkle(g,it.x+Math.cos(G.t*3+it.sw)*R*.7,it.y+Math.sin(G.t*3.7)*R*.6,5+2*Math.sin(G.t*6),G.t*1.5);
         sparkle(g,it.x-R*.8,it.y-R*.5+Math.sin(G.t*4)*3,3.5,-G.t);
@@ -1554,6 +1834,136 @@ function drawItems(g){
   }
 }
 function drawDebris(g){for(const d of debris)stampScoop(g,d.f,d.x,d.y,0,d.rot,1,d.coat)}
+
+/* ---------- the Ultimate Sundae Zone: drawing ---------- */
+let ZB=null,ZBG=null,ZPAT=null,ZSCAN=null,BULBS=[],bulbKey='';
+function zoneBuffers(bw,bh){                 /* the low-res buffer, a strip of wallpaper wide enough to slide, and scanlines */
+  const T=zoneTile();
+  if(!ZB){ZB=document.createElement('canvas');ZBG=ZB.getContext('2d')}
+  if(ZB.width===bw&&ZB.height===bh)return;
+  ZB.width=bw;ZB.height=bh;
+  ZPAT=document.createElement('canvas');ZPAT.width=bw+T.width;ZPAT.height=T.height;
+  const pg=ZPAT.getContext('2d');for(let x=0;x<ZPAT.width;x+=T.width)pg.drawImage(T,x,0);
+  ZSCAN=document.createElement('canvas');ZSCAN.width=bw;ZSCAN.height=bh;
+  const sg=ZSCAN.getContext('2d');sg.fillStyle='rgba(8,0,24,.22)';for(let y=1;y<bh;y+=2)sg.fillRect(0,y,bw,1);
+}
+function drawZoneBG(g,a){
+  const bw=Math.ceil(FW/ZPX)+1,bh=Math.ceil(H/ZPX)+1;
+  zoneBuffers(bw,bh);
+  const b=ZBG,tw=ZT.width,th=ZT.height,t=reduce?0:G.t;
+  const p=(t*.12)%ZPAL.length,i=p|0,f=p-i,A=ZPAL[i],B=ZPAL[(i+1)%ZPAL.length];
+  const top=A[0].map((v,j)=>v+(B[0][j]-v)*f),bot=A[1].map((v,j)=>v+(B[1][j]-v)*f);
+  const gr=b.createLinearGradient(0,0,0,bh);gr.addColorStop(0,css(top));gr.addColorStop(1,css(bot));
+  b.globalAlpha=1;b.fillStyle=gr;b.fillRect(0,0,bw,bh);
+  b.globalAlpha=.6;                          /* kept soft so scoops always read first */
+  const sx=t*7,sy0=t*5-G.cam/ZPX*.35;       /* drifts on its own, and slides down as you climb */
+  for(let y=0;y<bh;y++){
+    const w=reduce?0:Math.sin(y*.08+t*2.2)*4+Math.sin(y*.027-t*1.3)*3,v=reduce?0:Math.sin(y*.05+t*1.6)*2;
+    const ox=((Math.round(sx+w)%tw)+tw)%tw,oy=((Math.round(y+sy0+v)%th)+th)%th;
+    b.drawImage(ZPAT,ox,oy,bw,1,0,y,bw,1);
+  }
+  b.globalAlpha=1;b.drawImage(ZSCAN,0,0);
+  g.save();g.globalAlpha=a;g.imageSmoothingEnabled=false;g.drawImage(ZB,0,0,bw,bh,0,0,bw*ZPX,bh*ZPX);g.restore();
+  drawBulbs(g,a);
+  if(a>.5){skyTop=css(top);skyBot=css(bot)}
+}
+function drawBulbs(g,a){                     /* marquee lights chasing around the edge of the screen */
+  const key=FW+'x'+H;
+  if(key!==bulbKey){
+    bulbKey=key;BULBS=[];
+    const ins=7,w=FW-ins*2,h=H-ins*2,P=2*(w+h),n=Math.round(P/26);
+    for(let i=0;i<n;i++){
+      let d=i*P/n;
+      BULBS.push(d<w?[ins+d,ins]:(d-=w)<h?[FW-ins,ins+d]:(d-=h)<w?[FW-ins-d,H-ins]:[ins,H-ins-(d-w)]);
+    }
+  }
+  const ph=reduce?0:Math.floor(G.t*9);
+  g.globalAlpha=a;
+  for(let i=0;i<BULBS.length;i++){
+    const[x,y]=BULBS[i],on=(i+ph)%3===0;
+    if(on)g.drawImage(GLOWS.gold,x-11,y-11,22,22);
+    g.fillStyle=on?'#fff7c2':'rgba(255,207,74,.35)';g.fillRect(x-2,y-2,4,4);
+  }
+  g.globalAlpha=1;
+}
+function drawHole(g){
+  const h=G.hole;if(!h||G.state!=='play')return;
+  const x=holeX(h),y=sy(centerH(h.n));
+  if(y<-h.r*1.6-60||y>H+h.r*1.6)return;
+  for(let i=0;i<14;i++){                     /* sprinkles being pulled in */
+    const u=(G.t*.45+i/14)%1,an=i*2.4+G.t*2.5+u*3,d=h.r*(1.9-1.5*u);
+    g.globalAlpha=Math.min(1,u*4)*(1-u*.6);g.fillStyle=SPRINK[i%5];
+    g.fillRect(x+Math.cos(an)*d-1.6,y+Math.sin(an)*d*.9-1.6,3.2,3.2);
+  }
+  g.globalAlpha=1;
+  const s=reduce?1:1+.05*Math.sin(G.t*4),spin=G.t*(reduce?.6:2.4);
+  g.save();g.translate(x,y);g.scale(s,s);
+  g.rotate(-spin);g.drawImage(HOLE,-HW/2,-HW/2,HW,HW);
+  g.rotate(spin*1.6);g.globalAlpha=.4;g.drawImage(HOLE,-HW*.32,-HW*.32,HW*.64,HW*.64);   /* a smaller swirl turning the other way, for depth */
+  g.restore();
+  if(!holeSign)holeSign=paintHoleSign();
+  const c=holeSign,by=y-h.r-28+(reduce?0:Math.sin(G.t*2.2)*3),bx=clamp(x,c.lw/2+4,W-c.lw/2-4);
+  g.drawImage(c,bx-c.lw/2,by-c.lh/2,c.lw,c.lh);
+}
+function drawZoneIn(g,z){                    /* warping in: the wormhole swells until it fills the screen */
+  const u=clamp(z.t/.9,0,1);if(u>=1||reduce)return;
+  const s=1+16*u*u*u,a=1-clamp((u-.6)/.4,0,1);
+  g.save();g.globalAlpha=a;g.translate(z.hx,sy(z.hh));g.rotate(-G.t*2.4-u*9);g.scale(s,s);g.drawImage(HOLE,-HW/2,-HW/2,HW,HW);g.restore();
+}
+function drawRays(g,z){                      /* the jackpot: golden rays wheeling out from the top of the stack */
+  if(!z.rays)return;
+  const u=z.rays/2.4;if(u>=1)return;
+  const n=stack.length,top=stack[n-1],x=top?top.px:cone.x,y=n?sy(centerH(n-1))-(top.dy||0):sy(CH);
+  const a=(u<.08?u/.08:1-(u-.08)/.92)*.5,L=Math.max(FW,H)*1.3;
+  g.save();g.translate(x,y);g.rotate(reduce?0:G.t*.7);g.globalAlpha=a;g.fillStyle='#ffe9a0';
+  g.beginPath();for(let i=0;i<14;i++){const t0=i/14*TAU;g.moveTo(0,0);g.arc(0,0,L,t0,t0+TAU/28);g.closePath()}g.fill();
+  g.globalAlpha=Math.min(1,a*2);g.drawImage(GLOWS.gold,-GW,-GW,GW*2,GW*2);
+  g.restore();
+}
+function drawZoneOver(g,z){
+  if(z.phase==='in'||z.phase==='play'){      /* landing marks: where the next scoops will cross the top of the stack */
+    const ty=sy(centerH(stack.length))+R*.25;let k=0;
+    for(const it of items){
+      if(!it.zone||it.bounced||it.ab===false)continue;
+      const a=(k?.35:.9)*clamp(1.15-(ty-it.y)/H,.2,1),pulse=k?1:1+.08*Math.sin(G.t*12);
+      g.globalAlpha=a;
+      g.beginPath();g.ellipse(it.x,ty,R*1.15*pulse,R*.36*pulse,0,0,TAU);
+      g.lineWidth=5;g.strokeStyle='rgba(26,19,71,.5)';g.stroke();g.lineWidth=2.5;g.strokeStyle=k?'#fff6e4':'#ffcf4a';g.stroke();
+      if(++k>=2)break;
+    }
+    g.globalAlpha=1;
+  }
+  const c=z.gc;if(!c)return;
+  const n=stack.length,top=stack[n-1];
+  if(c.k>0&&top){                            /* the magnet's pull, drawn as a beam of gold dashes running to the top scoop */
+    g.save();g.globalAlpha=c.k*.75;g.setLineDash([3,9]);g.lineDashOffset=-G.t*70;g.lineCap='round';
+    g.beginPath();g.moveTo(c.x,c.y);g.lineTo(top.px,sy(centerH(n-1))-R*.5);
+    g.lineWidth=6;g.strokeStyle='rgba(26,19,71,.45)';g.stroke();g.lineWidth=3;g.strokeStyle='#ffe27a';g.stroke();
+    g.restore();
+  }
+  g.globalAlpha=.85+.15*Math.sin(G.t*8);g.drawImage(GLOWS.gold,c.x-GW*.7,c.y-GW*.7,GW*1.4,GW*1.4);g.globalAlpha=1;
+  g.save();g.translate(c.x,c.y);g.rotate(Math.sin(G.t*3)*.15);g.scale(1.25,1.25);g.drawImage(GCH,-JW/2,-JW/2,JW,JW);g.restore();
+  sparkle(g,c.x+Math.cos(G.t*3)*R,c.y+Math.sin(G.t*3.7)*R*.8,5+2*Math.sin(G.t*6),G.t*1.5);
+  sparkle(g,c.x-R,c.y-R*.6+Math.sin(G.t*4)*3,3.5,-G.t);
+}
+/* the wavy look: the foreground is drawn into its own canvas and copied back in thin strips, each nudged sideways */
+let FX=null,FXG=null;
+function fxBegin(){
+  if(!FX){FX=document.createElement('canvas');FXG=FX.getContext('2d')}
+  if(FX.width!==cv.width||FX.height!==cv.height){FX.width=cv.width;FX.height=cv.height}
+  FXG.setTransform(1,0,0,1,0,0);FXG.clearRect(0,0,FX.width,FX.height);
+  const sc=dpr*scale;FXG.setTransform(sc,0,0,sc,0,0);
+  return FXG;
+}
+function fxBlit(g,k){
+  const sc=dpr*scale,sh=Math.max(2,Math.round(5*sc)),amp=4*k*sc,Hd=FX.height,Wd=FX.width;
+  g.save();g.setTransform(1,0,0,1,0,0);
+  for(let y=0;y<Hd;y+=sh){
+    const h=Math.min(sh,Hd-y),ly=y/sc;
+    g.drawImage(FX,0,y,Wd,h,amp*(Math.sin(ly*.034+G.t*3.1)+.5*Math.sin(ly*.012-G.t*1.9)),y,Wd,h);
+  }
+  g.restore();
+}
 function drawParts(g){
   for(const p of parts){
     const a=clamp(p.l/p.m,0,1);
@@ -1629,14 +2039,22 @@ function drawBanner(g){
 }
 
 function draw(){
-  const sc=dpr*scale;
+  const sc=dpr*scale,z=G.state==='play'?G.zone:null,zv=zoneVis(z);
   ctx.setTransform(sc,0,0,sc,0,0);
-  drawSky(ctx);
-  const shx=G.shake>0?(Math.random()-.5)*14*G.shake:0,shy=G.shake>0?(Math.random()-.5)*10*G.shake:0;
-  ctx.save();ctx.translate(offX+shx,shy);
-  drawTower(ctx);drawItems(ctx);drawDebris(ctx);drawParts(ctx);drawPops(ctx);
+  if(zv<1)drawSky(ctx);
+  if(zv>0)drawZoneBG(ctx,zv);
+  ctx.save();ctx.translate(offX,0);
+  drawHole(ctx);
+  if(z){drawZoneIn(ctx,z);drawRays(ctx,z)}
   ctx.restore();
+  const shx=G.shake>0?(Math.random()-.5)*14*G.shake:0,shy=G.shake>0?(Math.random()-.5)*10*G.shake:0;
+  const wavy=zv>0&&!reduce,g=wavy?fxBegin():ctx;
+  g.save();g.translate(offX+shx,shy);
+  drawTower(g);drawItems(g);if(z)drawZoneOver(g,z);drawDebris(g);drawParts(g);drawPops(g);
+  g.restore();
+  if(wavy)fxBlit(ctx,zv);
   if(G.flash>0){ctx.fillStyle=`rgba(${flashC},${A3(Math.min(.5,G.flash*.5))})`;ctx.fillRect(0,0,FW,H)}
+  if(G.whiteout>0){ctx.fillStyle=`rgba(255,255,255,${A3(Math.min(1,G.whiteout))})`;ctx.fillRect(0,0,FW,H)}
   drawBanner(ctx);
   if(G.frame%20===0){                        /* the page behind the canvas follows the sky, for the edges iPhone shows; only touched when it changes */
     const bg=`linear-gradient(${skyTop},${skyBot})`;
@@ -1693,6 +2111,17 @@ function sfxAlert(){tone(1320,.18,'sine',.05,640)}            /* a cherry just a
 function sfxBurstStart(){tone(260,.35,'triangle',.08,880)}
 function sfxBurst(k){tone(440*Math.pow(2,NOTES[Math.min(k,NOTES.length-1)]/12),.11,'triangle',.07)}
 function sfxCherry(){[0,4,7,12,16,19,24].forEach((s,i)=>tone(523*Math.pow(2,s/12),.22,'square',.035,0,i*.045))}
+function sfxHole(){tone(160,.8,'sine',.06,90);tone(1200,.5,'triangle',.02,2400,.1)}            /* a wormhole comes into view */
+function sfxZoneIn(){tone(110,.9,'sawtooth',.045,1760);[0,4,7,12,16,19,24].forEach((s,i)=>tone(392*Math.pow(2,s/12),.12,'square',.03,0,.3+i*.05))}
+function sfxZoneMiss(){[0,-1,-2].forEach((s,i)=>tone(311*Math.pow(2,s/12),.22,'square',.045,0,i*.26));tone(277,.7,'square',.045,220,.78)}   /* wah, wah, wah, waaah */
+function sfxPerfect(){[0,4,7,12,16,19,24].forEach((s,i)=>tone(523*Math.pow(2,s/12),.14,'square',.035,0,i*.06))}
+function sfxGoldCherry(){tone(1568,.6,'sine',.05);tone(2349,.7,'sine',.035,0,.14);tone(3136,.8,'sine',.025,0,.28)}
+function sfxJackpot(){
+  tone(196,.6,'sawtooth',.06,784);
+  [0,4,7,12,16,19,24,28,31,36].forEach((s,i)=>tone(392*Math.pow(2,s/12),.18,'square',.03,0,.05+i*.04));
+  [0,4,7,12].forEach(s=>tone(784*Math.pow(2,s/12),1.1,'triangle',.035,0,.5));
+}
+function sfxCoin(k){tone(k%2?1976:2637,.07,'square',.02)}       /* the payout: coins rattling out of a slot machine */
 
 /* ---------- tilt ---------- */
 const TILT_RANGE=20;                      /* degrees of tilt that cover the full width */
@@ -1774,7 +2203,8 @@ addEventListener('keyup',e=>{
 /* ---------- interface ---------- */
 const el={score:$('#score'),height:$('#height'),lives:$('#lives'),toast:$('#toast'),banner:$('#banner'),recenter:$('#recenter'),
   menu:$('#menu'),over:$('#over'),hud:$('#hud'),hint:$('#hint'),buff:$('#buff'),buffBar:$('#buffBar'),buffTxt:$('#buffTxt'),buffX:$('#buffX')};
-let hs=-1,hn=-1,hl=-1,toastT=0,buffOn=false,buffS=-1,cornerOn=null;
+let hs=-1,hn=-1,hl=-1,toastT=0,buffOn=false,buffS=-1,cornerOn=null,zKey='';
+const zm={box:$('#zmeter'),txt:$('#ztxt'),pips:$('#zpips')};
 function buildLives(){                          /* one slot per possible life; empty slots show room for hot fudge */
   const slots=Math.max(CONFIG.lives.max,CONFIG.lives.start),perRow=slots<=3?slots:Math.ceil(slots/2);
   el.lives.style.maxWidth=(perRow*26+(perRow-1)*6)+'px';
@@ -1802,6 +2232,15 @@ function hudUpdate(){
     if(s!==buffS){buffS=s;el.buffTxt.textContent=s+'s'}
     el.buff.classList.toggle('low',G.syrupT<2.5);
   }
+  const z=G.state==='play'?G.zone:null,zk=z?z.caught+'|'+z.phase+'|'+z.missed:'';   /* zone meter: only touched when it changes */
+  if(zk!==zKey){
+    zKey=zk;zm.box.hidden=!z;
+    if(z){
+      if(zm.pips.children.length!==z.total)zm.pips.innerHTML='<i></i>'.repeat(z.total);
+      [...zm.pips.children].forEach((p,i)=>{const s=z.seq[i];p.className=i<z.caught?(s.gold?'gold':s.k):z.missed&&i===z.caught?'miss':s.gold?'g0':''});
+      zm.txt.textContent=z.won?'Jackpot!':z.missed?'Missed one':z.phase==='cherry'?'Perfect!':z.caught+' / '+z.total;
+    }
+  }
 }
 function banner(text,sub=''){
   el.banner.textContent=sub?text+'. '+sub:text;              /* for screen readers */
@@ -1827,7 +2266,7 @@ function begin(){
   if(Settings.controls==='tilt')enableTilt();   /* must be called inside the tap on iPhone */
   startGame();
   el.menu.hidden=true;el.over.hidden=true;el.hud.hidden=false;
-  hs=hn=hl=-1;buffOn=false;buffS=-1;el.buff.hidden=true;el.height.textContent='0 scoops';
+  hs=hn=hl=-1;buffOn=false;buffS=-1;el.buff.hidden=true;el.height.textContent='0 scoops';zKey='';zm.box.hidden=true;
   try{if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}
   setTimeout(()=>tiltNotice(0),1500);
 }
@@ -1932,7 +2371,7 @@ function resize(){
   SB=Math.min(60,($('#safe')?$('#safe').offsetHeight:0)/scale);
   const sh=document.querySelector('#menu .sheet');
   G.menuLift=sh?Math.max(0,sh.offsetHeight/scale-34+10):0;
-  banCache.clear();
+  banCache.clear();holeSign=null;
   if(G.state==='menu'){
     const k=demoScoops();                                    /* keep the demo stack clear of the title */
     if(k!==stack.length&&typeof menuDemo==='function'&&menuReady)menuDemo(k);
@@ -1950,7 +2389,7 @@ resize();
 new ResizeObserver(resize).observe(cv);
 buildLives();menuReady=true;menuDemo(demoScoops());drawIcons();
 try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(()=>{drawIcons();resize();warmBanner(G.mi)})}catch(e){}
-if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawn,spawnOne,pickKind,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
+if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawn,spawnOne,pickKind,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
 requestAnimationFrame(frame);
 })();
 </script>
