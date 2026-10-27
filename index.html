@@ -63,6 +63,13 @@ body{
 .life.lost{opacity:.22;transform:scale(.78)}
 .life.gain{animation:lifeGain .6s ease-out}
 @keyframes lifeGain{0%{transform:scale(.5)}35%{transform:scale(1.5) rotate(-8deg);filter:drop-shadow(0 0 8px #ff9ec0)}100%{transform:scale(1)}}
+/* streak: scoops caught in a row */
+.streak{display:flex;align-items:center;gap:6px;margin-top:5px;font-size:14px;line-height:1;text-shadow:0 2px 0 rgba(26,19,71,.65)}
+.streak[hidden],.streak i[hidden]{display:none}
+.streak b{font-family:var(--display);font-weight:400;font-size:21px;color:var(--mint)}
+.streak i{font-style:normal;font-family:var(--display);font-size:16px;color:var(--ink);background:var(--mint);border-radius:8px;padding:2px 7px 1px;text-shadow:none}
+.streak.pop b{animation:streakPop .35s ease-out}
+@keyframes streakPop{40%{transform:scale(1.35)}}
 /* strawberry syrup timer */
 .buff{
   display:flex;align-items:center;gap:8px;align-self:flex-start;margin-top:8px;padding:4px 11px 4px 9px;border-radius:999px;
@@ -217,7 +224,7 @@ body{
 .tops .ico{width:40px;height:40px}
 @media (max-height:700px){.tops{display:none}}      /* short phones: the toppings are in the patch notes and obvious in play */
 
-@media (prefers-reduced-motion:reduce){.toast{transition:none}.buff.low{animation:none}.life.gain{animation:none}.icon-btn{transition:none}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}.buff.low{animation:none}.streak.pop b{animation:none}.life.gain{animation:none}.icon-btn{transition:none}}
 </style>
 </head>
 <body>
@@ -230,6 +237,7 @@ body{
       <span class="lbl">Score</span>
       <span class="num" id="score">0</span>
       <span class="sub" id="height">0 scoops</span>
+      <span class="streak" id="streak" hidden><b id="streakN">0</b>in a row<i id="streakX" hidden>x2</i></span>
       <span class="buff" id="buff" hidden role="status" aria-label="Strawberry syrup boost"><span class="bx" id="buffX">2x</span><i class="bar"><b id="buffBar"></b></i><span class="bt" id="buffTxt">8s</span></span>
     </div>
     <button class="chip" id="recenter" type="button" hidden>Recenter tilt</button>
@@ -248,6 +256,7 @@ body{
   <section class="sheet">
     <ul class="legend">
       <li><canvas class="ico" data-ico="match" width="92" height="92"></canvas><span><b>Same flavor in a row</b> raises your multiplier.</span></li>
+      <li><canvas class="ico" data-ico="streak" width="92" height="92"></canvas><span><b id="streakLegend">10 in a row</b>, any flavor, doubles your points. Keep going for more.</span></li>
       <li><canvas class="ico" data-ico="gold" width="92" height="92"></canvas><span><b>Gold scoops</b> add 5 to the multiplier.</span></li>
       <li><canvas class="ico" data-ico="junk" width="92" height="92"></canvas><span><b>Junk</b> costs a life. You start with <span id="lifeWord">three</span>.</span></li>
     </ul>
@@ -374,10 +383,15 @@ const CONFIG={
     catchWidth:1.45,                         /* a bit more forgiving than plain scoops (1.3) */
     reward:50,rewardInterval:.04             /* the gold cherry's payout, and seconds between those scoops */
   },
+  streak:{                                   /* scoops caught in a row, any flavor */
+    every:10,                                /* each this many in a row adds 1 to the streak multiplier (x2 at 10, x3 at 20...) */
+    max:5,                                   /* highest streak multiplier */
+    grace:.3                                 /* a scoop missed within this many seconds of another catch is forgiven (you cannot catch two at once) */
+  },
   music:{
-    volume:.1,                               /* loudness of the songs, 0 to 1. The sound effects are soft, so keep this low enough
-                                                for them to stand out (.1 puts the songs about level with the loudest catches) */
-    zone:.11,                                /* the Sundae Zone's own synthesized tune (.11 matches the songs' loudness) */
+    volume:.075,                             /* loudness of the songs, 0 to 1. The sound effects are soft, so keep this low enough
+                                                for them to stand out (.075 puts the songs a little under the loudest catches) */
+    zone:.0825,                              /* the Sundae Zone's own synthesized tune (keep it 1.1 times the songs to match their loudness) */
     fade:3                                   /* how quickly songs fade in and out: higher is faster (3 is about a second) */
   }
 };
@@ -394,8 +408,12 @@ const LEADERBOARD={
 
 /* ============================ PATCH NOTES ============================
    Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
-const VERSION='1.10';
+const VERSION='1.11';
 const PATCH_NOTES=[
+  {v:'1.11',title:'Streaks',items:[
+    'New streak bonus: catch scoops in a row, any flavor. Every 10 in a row adds to a streak multiplier, x2 then x3 up to x5, on top of your flavor multiplier.',
+    'Missing a scoop or catching junk ends the streak. When two scoops fall side by side you can only catch one, so a scoop that slips past while you catch another is forgiven.',
+    'All music is 25% quieter.']},
   {v:'1.10',title:'Sundae Zone soundtrack',items:[
     'The Ultimate Sundae Zone has a new 16-bit tune in the style of the Sega Genesis, with FM bass and lead, chip arpeggios and drums, right on the beat the scoops fall to.',
     'Catching every scoop in the zone now earns a CONGRATULATIONS!',
@@ -1269,7 +1287,8 @@ const Tower=(()=>{
 /* ---------- game state ---------- */
 const G={state:'menu',t:0,score:0,best:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,cam:0,alt:0,
   shake:0,flash:0,menuLift:0,spawnT:1,junkRun:0,last:null,tight:false,bestMult:1,tall:0,overT:0,overShown:false,mi:0,frame:0,
-  syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0},hole:null,zone:null,zoneN:0,whiteout:0};
+  syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0},hole:null,zone:null,zoneN:0,whiteout:0,
+  streak:0,bestStreak:0,lastGood:-9,breakAt:0};
 const cone={x:195,v:0,af:0,target:195};
 let stack=[],items=[],debris=[],parts=[],pops=[];
 const MILE=[{n:12,t:'Cloud nine'},{n:28,t:'Stratosphere'},{n:45,t:'Orbit'},{n:65,t:'Deep space'},{n:90,t:'Ice cream galaxy'},
@@ -1284,6 +1303,7 @@ const fallSpeed=n=>Math.min(CONFIG.fall.max,CONFIG.fall.start+n*CONFIG.fall.perS
 const multBoost=()=>Math.min(CONFIG.fall.multBoostMax,1+(G.mult-1)*CONFIG.fall.perMult);   /* a big multiplier is worth more, so drops come faster */
 const dropSpeed=()=>fallSpeed(stack.length)*multBoost();   /* new drops only: things already falling keep their speed */
 const syrupMult=()=>G.syrupT>0?CONFIG.syrup.multiplier:1;     /* strawberry syrup doubles every point you earn */
+const streakMult=()=>Math.min(CONFIG.streak.max,1+Math.floor(G.streak/CONFIG.streak.every));   /* x2 at 10 in a row, x3 at 20... */
 const shielded=()=>!!G.burst||G.shield>0;                      /* cherry burst: junk cannot hurt */
 
 /* ---------- effects ---------- */
@@ -1305,7 +1325,8 @@ function landScoop(it,dx){
     else if(!G.grace)G.mult=1;            /* a gold scoop bridges one change of flavor */
     G.grace=false;G.lastFlavor=it.f;
   }
-  const pts=10*G.mult*syrupMult();G.score+=pts;G.bestMult=Math.max(G.bestMult,G.mult);
+  G.streak++;G.bestStreak=Math.max(G.bestStreak,G.streak);goodCatch();
+  const sm=streakMult(),pts=10*G.mult*sm*syrupMult();G.score+=pts;G.bestMult=Math.max(G.bestMult,G.mult);
   Tower.resize(n,n+1);
   const sc={f:gold?GOLD:it.f,jx:0,px:it.x,sq:0,sqv:11};
   if(it.coat)sc.coat={k:it.coat.k,t:.6};    /* zone scoops arrive sauced: the coat just wobbles as it lands */
@@ -1319,7 +1340,28 @@ function landScoop(it,dx){
   else sfxCatch(G.mult);
   pop('+'+pts,it.x,it.y-(gold?4:20),G.syrupT>0?'#ffb3cc':G.mult>1?'#fff6e4':'#ffffffcc',G.mult>3?30:24);
   if(G.mult>1&&!gold)pop('x'+G.mult,it.x,it.y-46,'#ffcf4a',22);
+  const E=CONFIG.streak.every;
+  if(G.streak%E===0&&G.streak<=E*(CONFIG.streak.max-1)){      /* the streak multiplier just went up */
+    pop(G.streak+' IN A ROW! x'+sm,it.x,it.y-74,'#72e6c3',26);
+    spark(it.x,it.y,['#72e6c3','#d2fff0','#ffffff'],18,300,.7,4);ring(it.x,it.y,'#72e6c3');sfxStreak(sm);
+  }
   milestone();
+}
+/* ---------- streak: scoops caught in a row, any flavor ----------
+   Missing a scoop or catching junk ends it. Two scoops can fall side by side and only one can be caught, so a scoop
+   that gets past you while you are catching something else (within CONFIG.streak.grace seconds) is forgiven. */
+function goodCatch(){G.lastGood=G.t;G.breakAt=0}   /* a catch also forgives a miss that happened a moment before it */
+function scoopMissed(){
+  if(!G.streak||G.t-G.lastGood<CONFIG.streak.grace)return;
+  if(!G.breakAt)G.breakAt=G.t+CONFIG.streak.grace;   /* ends unless a catch comes right after */
+}
+function streakEnd(){
+  G.breakAt=0;
+  if(G.streak>=5){
+    const n=stack.length,top=stack[n-1];
+    pop('Streak over',top?top.px:cone.x,(n?sy(centerH(n-1)):sy(CH))-R-30,'#ffb0b0',22);sfxStreakEnd();
+  }
+  G.streak=0;
 }
 function milestone(){
   if(G.burst)return;                      /* a cherry burst announces itself; milestones wait for it to finish */
@@ -1332,7 +1374,7 @@ function debrisFrom(s,i,vx0=0){
   debris.push({f:s.f,x:s.px,y:sy(centerH(i)),vx:vx0+rnd(-130,130),vy:rnd(-420,-200),rot:0,vr:rnd(-6,6),coat:s.coat?{k:s.coat.k,t:1}:null});
 }
 function hitJunk(it){
-  G.lives--;G.mult=1;G.grace=false;G.lastFlavor=null;
+  G.lives--;G.mult=1;G.grace=false;G.lastFlavor=null;streakEnd();
   G.shake=reduce?0:.7;G.flash=.45;flashC='255,90,90';
   if(stack.length){const i=stack.length-1;debrisFrom(stack.pop(),i);Tower.resize(i+1,i)}
   Tower.kick((Math.random()<.5?-1:1)*22);
@@ -1363,6 +1405,7 @@ function coatTop(kind){                    /* fudge and syrup pour over the scoo
 }
 function catchTopping(it){
   const k=it.kind,x=it.x,y=it.y;
+  goodCatch();                               /* busy catching this: a scoop slipping past right now does not end the streak */
   if(k==='fudge'){
     if(G.lives<CONFIG.lives.max){G.lives++;pop('+1 life',x,y-32,'#ff9ec0',30)}
     else if(CONFIG.fudge.pointsAtMax>0){const p=CONFIG.fudge.pointsAtMax*syrupMult();G.score+=p;pop('+'+p,x,y-32,'#ff9ec0',28)}
@@ -1831,11 +1874,17 @@ function playStep(dt){
           continue;
         }
         if(it.zone)zoneMiss(it);
+        if((it.kind==='scoop'||it.kind==='gold')&&!it.missed){it.missed=true;scoopMissed()}
         if(Math.abs(dx)<w+R*.8){it.bounced=true;it.vx=Math.sign(dx||1)*rnd(170,260);it.vy*=.6}
       }
     }
-    if(it.y>H+90||it.x<-90||it.x>W+90){if(it.zone)zoneMiss(it);items.splice(k,1)}
+    if(it.y>H+90||it.x<-90||it.x>W+90){
+      if(it.zone)zoneMiss(it);
+      if((it.kind==='scoop'||it.kind==='gold')&&!it.missed)scoopMissed();   /* slipped by without ever reaching the stack's top */
+      items.splice(k,1);
+    }
   }
+  if(G.breakAt&&G.t>=G.breakAt)streakEnd();   /* a miss nobody forgave */
   if(G.burst)burstStep(dt);
 }
 function idleStep(dt){
@@ -1879,7 +1928,8 @@ function startGame(){
   stack=[];items=[];debris=[];parts=[];pops=[];Tower.reset();settled=0;BAN.img=null;
   Object.assign(G,{state:'play',score:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,alt:0,spawnT:.9,junkRun:0,last:null,tight:false,
     bestMult:1,tall:0,mi:0,shake:0,flash:0,overT:0,overShown:false,newBest:false,
-    syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0},hole:makeHole(CONFIG.zone.first),zone:null,zoneN:0,whiteout:0});
+    syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0},hole:makeHole(CONFIG.zone.first),zone:null,zoneN:0,whiteout:0,
+    streak:0,bestStreak:0,lastGood:-9,breakAt:0});
   cone.x=W/2;cone.v=0;cone.af=0;cone.target=W/2;
   tiltCalibrate();warmBanner(0);
 }
@@ -2243,6 +2293,7 @@ function drawIcons(){
     const g=c.getContext('2d');g.setTransform(2,0,0,2,0,0);g.clearRect(0,0,46,46);
     const k=c.dataset.ico;
     if(k==='match'){stampScoop(g,FLAVORS[0],23,32,0,0,.5);stampScoop(g,FLAVORS[0],23,16,0,0,.5)}
+    else if(k==='streak'){stampScoop(g,FLAVORS[1],23,38,0,0,.4);stampScoop(g,FLAVORS[4],23,26,0,0,.4);stampScoop(g,FLAVORS[3],23,14,0,0,.4)}
     else if(k==='gold'){stampScoop(g,GOLD,23,25,0,0,.56);sparkle(g,38,9,5,.4);sparkle(g,7,12,3.5,0)}
     else if(k==='junk'){stampJunk(g,0,15,16,-.3,.52);stampJunk(g,4,32,31,.5,.52)}      /* pickle and mustard */
     else if(TSPR[k])stampTop(g,k,23,24,0,.66);
@@ -2345,6 +2396,8 @@ function sfxJackpot(){
   [0,4,7,12,16,19,24,28,31,36].forEach((s,i)=>tone(392*Math.pow(2,s/12),.18,'square',.03,0,.05+i*.04));
   [0,4,7,12].forEach(s=>tone(784*Math.pow(2,s/12),1.1,'triangle',.035,0,.5));
 }
+function sfxStreak(m){[0,7,12,16+(m-2)*2].forEach((s,i)=>tone(587*Math.pow(2,s/12),.13,'triangle',.06,0,i*.055))}   /* climbs higher with each level */
+function sfxStreakEnd(){tone(440,.28,'triangle',.05,220)}
 function sfxCoin(k){tone(k%2?1976:2637,.07,'square',.02)}       /* the payout: coins rattling out of a slot machine */
 
 /* ---------- tilt ---------- */
@@ -2427,8 +2480,9 @@ addEventListener('keyup',e=>{
 
 /* ---------- interface ---------- */
 const el={score:$('#score'),height:$('#height'),lives:$('#lives'),toast:$('#toast'),banner:$('#banner'),recenter:$('#recenter'),
-  menu:$('#menu'),over:$('#over'),hud:$('#hud'),hint:$('#hint'),buff:$('#buff'),buffBar:$('#buffBar'),buffTxt:$('#buffTxt'),buffX:$('#buffX')};
-let hs=-1,hn=-1,hl=-1,toastT=0,buffOn=false,buffS=-1,cornerOn=null,zKey='';
+  menu:$('#menu'),over:$('#over'),hud:$('#hud'),hint:$('#hint'),buff:$('#buff'),buffBar:$('#buffBar'),buffTxt:$('#buffTxt'),buffX:$('#buffX'),
+  streak:$('#streak'),streakN:$('#streakN'),streakX:$('#streakX')};
+let hs=-1,hn=-1,hl=-1,hk=-1,toastT=0,buffOn=false,buffS=-1,cornerOn=null,zKey='';
 const zm={box:$('#zmeter'),txt:$('#ztxt'),pips:$('#zpips')};
 function buildLives(){                          /* one slot per possible life; empty slots show room for hot fudge */
   const slots=Math.max(CONFIG.lives.max,CONFIG.lives.start),perRow=slots<=3?slots:Math.ceil(slots/2);
@@ -2439,6 +2493,13 @@ function hudUpdate(){
   if(hs!==G.score){hs=G.score;el.score.textContent=G.score.toLocaleString()}
   const n=stack.length;
   if(hn!==n&&G.state==='play'){hn=n;el.height.textContent=n===1?'1 scoop':n+' scoops'}
+  if(hk!==G.streak){                            /* streak: shown from 3 in a row, with its multiplier once that kicks in */
+    const sm=streakMult();
+    el.streak.hidden=G.streak<3;el.streakN.textContent=G.streak;
+    el.streakX.hidden=sm<2;el.streakX.textContent='x'+sm;
+    if(G.streak>hk&&G.streak>=3&&G.streak%CONFIG.streak.every===0){el.streak.classList.remove('pop');void el.streak.offsetWidth;el.streak.classList.add('pop')}
+    hk=G.streak;
+  }
   if(hl!==G.lives){
     const gained=hl>=0&&G.lives>hl;
     [...el.lives.children].forEach((c,i)=>{
@@ -2495,7 +2556,7 @@ function begin(){
   if(Settings.controls==='tilt')enableTilt();   /* must be called inside the tap on iPhone */
   startGame();
   el.menu.hidden=true;el.over.hidden=true;el.hud.hidden=false;
-  hs=hn=hl=-1;buffOn=false;buffS=-1;el.buff.hidden=true;el.height.textContent='0 scoops';zKey='';zm.box.hidden=true;
+  hs=hn=hl=hk=-1;buffOn=false;buffS=-1;el.buff.hidden=true;el.height.textContent='0 scoops';zKey='';zm.box.hidden=true;
   try{if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}
   setTimeout(()=>tiltNotice(0),1500);
 }
@@ -2714,6 +2775,7 @@ setTimeout(()=>{if(Board.due())Board.post().catch(()=>{})},3000);   /* a post th
 /* numbers in the start sheet follow CONFIG */
 const WORDS=['no','one','two','three','four','five','six','seven','eight','nine','ten'];
 $('#lifeWord').textContent=WORDS[CONFIG.lives.start]||CONFIG.lives.start;
+$('#streakLegend').textContent=CONFIG.streak.every+' in a row';
 $('#tSyrup').textContent=CONFIG.syrup.multiplier+'x score, '+CONFIG.syrup.duration+'s';
 $('#tCherry').textContent='+'+CONFIG.cherry.burstScoops+' scoops';
 el.buffX.textContent=CONFIG.syrup.multiplier+'x';
@@ -2756,7 +2818,7 @@ resize();
 new ResizeObserver(resize).observe(cv);
 buildLives();menuReady=true;menuDemo(demoScoops());drawIcons();
 try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(()=>{drawIcons();resize();warmBanner(G.mi)})}catch(e){}
-if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawn,spawnOne,pickKind,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
+if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawn,spawnOne,pickKind,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,streakMult,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
 requestAnimationFrame(frame);
 })();
 </script>
