@@ -148,6 +148,10 @@ body{
 .stat{padding:10px 12px;border-radius:14px;background:rgba(255,246,228,.09);min-width:0}
 .stat b{display:block;margin-top:4px;font-family:var(--display);font-weight:400;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
 .stat.new b{color:var(--gold)}
+.stat.wide{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:inherit;text-transform:none;letter-spacing:0}
+.stat.wide .lbl,.stat.wide b{white-space:nowrap}
+.stat.wide b{margin-top:0}
+.stat.wide b small{font-family:var(--body);font-size:15px;font-weight:800;margin-left:6px;opacity:.85}
 
 /* corner icons, and the settings and patch notes panels */
 .corner{position:absolute;top:max(12px,env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));z-index:5;display:flex;gap:10px;pointer-events:none}
@@ -278,6 +282,7 @@ body{
       <div class="stat"><span class="lbl">Best</span><b id="oBest">0</b></div>
       <div class="stat"><span class="lbl">Tallest stack</span><b id="oTall">0</b></div>
       <div class="stat"><span class="lbl">Best multiplier</span><b id="oMult">x1</b></div>
+      <div class="stat wide" id="stStreak"><span class="lbl">Longest streak</span><b id="oStreak">0</b></div>
     </div>
     <p class="rank" id="oRank" hidden role="status"></p>
     <form class="post" id="post" hidden><input class="field" id="postName" maxlength="12" placeholder="Your name" autocomplete="nickname" enterkeyhint="send" spellcheck="false" aria-label="Your name for the leaderboard"><button class="chip" type="submit">Post</button></form>
@@ -408,8 +413,11 @@ const LEADERBOARD={
 
 /* ============================ PATCH NOTES ============================
    Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
-const VERSION='1.12';
+const VERSION='1.13';
 const PATCH_NOTES=[
+  {v:'1.13',title:'Cherry clears the way',items:[
+    'Catching a cherry clears away scoops that would land during the burst, so they no longer break your streak. The next scoop waits until the burst is done.',
+    'The game over screen now shows your longest streak, in gold when it beats your record.']},
   {v:'1.12',title:'Even scoops, gross junk',items:[
     'Scoops now fall one at a time, evenly spaced, in a straight line and always within reach of the last one, so every scoop can be caught.',
     'Junk and toppings come on their own random schedule. Junk falls at random speeds but never lands on a scoop as it arrives, and toppings land between scoops on your way from one to the next.',
@@ -1342,7 +1350,7 @@ const Tower=(()=>{
 const G={state:'menu',t:0,score:0,best:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,cam:0,alt:0,
   shake:0,flash:0,menuLift:0,next:{at:0,x:0},extraT:0,pending:null,bestMult:1,tall:0,overT:0,overShown:false,mi:0,frame:0,
   syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0},hole:null,zone:null,zoneN:0,whiteout:0,
-  streak:0,bestStreak:0};
+  streak:0,bestStreak:0,streakRecord:0};
 const cone={x:195,v:0,af:0,target:195};
 let stack=[],items=[],debris=[],parts=[],pops=[];
 const MILE=[{n:12,t:'Cloud nine'},{n:28,t:'Stratosphere'},{n:45,t:'Orbit'},{n:65,t:'Deep space'},{n:90,t:'Ice cream galaxy'},
@@ -1478,9 +1486,22 @@ function burstStart(it,gold=false){          /* gold: the zone's jackpot, a much
     k:(Math.random()*FLAVORS.length)|0,count:0,pts:0,last:null};
   G.shield=0;
   if(gold)return;                             /* the jackpot brings its own fanfare */
+  clearForBurst();
   banner('Cherry burst!');
   spark(it.x,it.y,['#ff5a78','#ff9ab0','#ffffff','#ffd54d'],26,340,.8,4);ring(it.x,it.y,'#ff7a96');
   flashC='255,110,150';G.flash=Math.max(G.flash,.2);sfxBurstStart();
+}
+/* While a cherry burst is going up there is no room to catch anything, so scoops that would land during it (or just
+   after), and any already beside the stack, vanish in a puff instead of counting as missed. The next one waits. */
+function clearForBurst(){
+  const C=CONFIG.cherry,quiet=C.burstScoops*C.burstInterval+.5,L=sy(centerH(stack.length));
+  for(const it of items){                    /* marked here, swept out after this frame's pass over the falling things */
+    if((it.kind!=='scoop'&&it.kind!=='gold')||it.zone||(L-it.y)/it.vy>quiet)continue;
+    const f=it.kind==='gold'?GOLD:it.f;
+    spark(it.x,it.y,[f.c,f.h,'#ffffff'],12,200,.55,4);ring(it.x,it.y,'#ffffffaa');
+    it.poof=true;
+  }
+  G.next.at=Math.max(G.next.at,G.t+quiet+.3);
 }
 function burstScoop(b){
   const n=stack.length,below=stack[n-1];
@@ -1906,7 +1927,7 @@ function playStep(dt){
 
   for(let k=items.length-1;k>=0;k--){
     const it=items[k];
-    if(!it)continue;
+    if(!it||it.poof)continue;
     it.age+=dt;it.y+=it.vy*dt;it.rot+=it.vr*dt;it.bx+=it.vx*dt;
     it.x=it.bx+Math.sin(G.t*2.6+it.sw)*it.swA;
     if(!it.bounced){
@@ -1934,6 +1955,7 @@ function playStep(dt){
       items.splice(k,1);
     }
   }
+  for(let k=items.length-1;k>=0;k--)if(items[k].poof)items.splice(k,1);   /* scoops cleared by a cherry burst */
   if(G.burst)burstStep(dt);
 }
 function idleStep(dt){
@@ -2607,6 +2629,10 @@ function showOver(){
   $('#oBest').textContent=G.best.toLocaleString();
   $('#oTall').textContent=G.tall+(G.tall===1?' scoop':' scoops');
   $('#oMult').textContent='x'+G.bestMult;
+  const st=G.bestStreak,rec=st>G.streakRecord;             /* longest streak this run; gold when it beats your record */
+  if(rec){G.streakRecord=st;try{localStorage.setItem('scooper.bestStreak',String(st))}catch(e){}}
+  $('#oStreak').innerHTML=st?st+'<small>in a row</small>':'0';
+  $('#stStreak').classList.toggle('new',rec);
   $('#stScore').classList.toggle('new',!!G.newBest&&G.score>0);
   overBoard();
   el.over.hidden=false;
@@ -2874,12 +2900,12 @@ function frame(ts){
   update(dt);draw();hudUpdate();
   requestAnimationFrame(frame);
 }
-try{G.best=+localStorage.getItem('scooper.best')||0}catch(e){}
+try{G.best=+localStorage.getItem('scooper.best')||0;G.streakRecord=+localStorage.getItem('scooper.bestStreak')||0}catch(e){}
 resize();
 new ResizeObserver(resize).observe(cv);
 buildLives();menuReady=true;menuDemo(demoScoops());drawIcons();
 try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(()=>{drawIcons();resize();warmBanner(G.mi)})}catch(e){}
-if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawnOne,scoopStep,extraStep,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,streakMult,JUNK,JSPR,stampJunk,stampScoop,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
+if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawnOne,scoopStep,extraStep,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,streakMult,JUNK,JSPR,stampJunk,stampScoop,catchTopping,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
 requestAnimationFrame(frame);
 })();
 </script>
