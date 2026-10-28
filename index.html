@@ -145,7 +145,7 @@ body{
 .legend li{display:flex;align-items:center;gap:12px;font-size:15px;line-height:1.25;font-weight:700}
 .legend li[hidden]{display:none}
 .legend b{color:var(--gold);font-weight:800}
-.ico{flex:none;width:46px;height:46px}
+.ico{flex:none;width:42px;height:42px}
 .btn{
   pointer-events:auto;-webkit-appearance:none;appearance:none;border:0;cursor:pointer;min-height:58px;
   font-family:var(--display);font-size:26px;letter-spacing:.02em;color:var(--ink);
@@ -279,7 +279,7 @@ body{
       <li><canvas class="ico" data-ico="streak" width="92" height="92"></canvas><span><b id="streakLegend">10 in a row</b>, any flavor, doubles your points. Keep going for more.</span></li>
       <li><canvas class="ico" data-ico="gold" width="92" height="92"></canvas><span><b>Gold scoops</b> add 5 to the multiplier.</span></li>
       <li><canvas class="ico" data-ico="junk" width="92" height="92"></canvas><span><b>Junk</b> costs a life. You start with <span id="lifeWord">three</span>.</span></li>
-      <li id="legendYo"><canvas class="ico" data-ico="froyo" width="92" height="92"></canvas><span><b>Frozen yogurt</b> looks like ice cream but slows you down.</span></li>
+      <li id="legendYo"><canvas class="ico" data-ico="froyo" width="92" height="92"></canvas><span><b>Frozen yogurt</b> slows you down.</span></li>
     </ul>
     <ul class="tops" aria-label="Toppings">
       <li><canvas class="ico" data-ico="fudge" width="92" height="92"></canvas><span><b>Hot fudge</b><br>+1 life</span></li>
@@ -452,8 +452,12 @@ const LEADERBOARD={
 
 /* ============================ PATCH NOTES ============================
    Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
-const VERSION='1.15';
+const VERSION='1.16';
 const PATCH_NOTES=[
+  {v:'1.16',title:'Fresh scoops',items:[
+    'Every ice cream scoop is redrawn: a rounder, lumpier ball with the curls a real scoop leaves, softer light, and a frilly lip with round lobes.',
+    'You can see what is in each flavor now: strawberry chunks and seeds, chocolate chips in the mint, fudge chunks in the chocolate, vanilla bean specks, a berry ripple with blueberries, and glitter on the gold.',
+    'Frozen yogurt is now served soft: two smooth coils with the end folded over on top, twisted with white yogurt, on a smooth rim instead of a frilly lip. It keeps its twin\'s colors, so it can still fool you at a glance.']},
   {v:'1.15',title:'Frozen yogurt',items:[
     'Watch out for frozen yogurt. It falls like a scoop and looks a lot like one, just paler, smoother and swirled with white.',
     'Catch it and your cone goes sluggish for 4 seconds. It still stacks, but scores nothing and leaves your multiplier and streak alone. Let it fall and nothing happens.',
@@ -540,11 +544,11 @@ const FLAVORS=[
   {id:'blue', c:'#938ff7',d:'#5650cc',h:'#d4d2ff',dot:'#2f2a8f',dots:'swirl'},
 ];
 const GOLD={id:'gold',c:'#ffd54d',d:'#d98c0a',h:'#fff7c2',dot:'#fff2a0',dots:'glint'};
-/* frozen yogurt: a paler twin of each flavor, smooth (no scoop marks) and swirled with white, so it passes for ice cream at a glance */
+/* frozen yogurt: a paler twin of each flavor, served soft (see paintSoftServe), so it passes for ice cream at a glance */
 const FROYO={
   straw:{id:'fy-straw',c:'#ffb3ca',d:'#e2819f',h:'#fff0f5',dots:'yogurt'},
   mint: {id:'fy-mint', c:'#b2eed9',d:'#74c9ab',h:'#f0fffa',dots:'yogurt'},
-  choc: {id:'fy-choc', c:'#c29c86',d:'#8c6651',h:'#eedccf',dots:'yogurt'},
+  choc: {id:'fy-choc', c:'#caa593',d:'#96705e',h:'#f3e3d8',dots:'yogurt'},
   van:  {id:'fy-van',  c:'#fbf5e2',d:'#d9cca6',h:'#ffffff',dots:'yogurt'},
   blue: {id:'fy-blue', c:'#c6c3fb',d:'#8f8be0',h:'#f1f0ff',dots:'yogurt'},
 };
@@ -553,76 +557,163 @@ const YOGURT=Object.values(FROYO);
 const seeded=s=>()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296};
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
 
-/* A scoop is a wide, slightly lopsided dome with scoop-mark ridges, sitting on a thick ruffled lip.
-   The lip hangs below the dome so it drapes over the top of the scoop underneath. */
-function paintScoop(g,f,cx,cy,r){
-  const rn=seeded(f.id.charCodeAt(0)*977+f.id.length*31);
-  const j=()=>(rn()-.5)*.13*r;
-  const a=[j(),j(),j(),j(),j(),j(),j(),j(),j()];
-  g.save();g.translate(cx,cy);g.lineJoin='round';g.lineCap='round';
-  const edge='rgba(26,19,71,.34)';
-
-  /* dome */
-  const dome=()=>{
+/* ---------- scoops ----------
+   Ice cream is a scooped ball: a lumpy dome lit from the upper left, with the curls the scoop leaves, bits of whatever
+   is in it, and a thick ruffled lip where the scoop's edge tore away. Frozen yogurt is soft-serve: two smooth coils
+   and a tip curling over, twisted with white yogurt, on a smooth rolled rim. Both are the same size and draw from the
+   same colors, so fro-yo passes for ice cream at a glance. The lip (or rim) hangs below the dome so it drapes over the
+   top of the scoop underneath. */
+const EDGE='rgba(26,19,71,.36)';
+function domeOf(f,r){                         /* the outline of the top, shared with paintCoat so sauce always fits */
+  const rn=seeded(f.id.charCodeAt(0)*977+f.id.length*31),a=Array.from({length:12},()=>(rn()-.5)*.1*r);
+  if(f.dots==='yogurt')return g=>{            /* a wide lower coil, a smaller one on top, and the end folded over in a little knob */
     g.beginPath();g.moveTo(-1.06*r,.22*r);
-    g.bezierCurveTo(-1.16*r+a[0],-.66*r+a[1],-.66*r+a[2],-1.13*r+a[3],a[4]*.5,-1.1*r+a[5]);
-    g.bezierCurveTo(.66*r+a[6],-1.13*r+a[7],1.16*r+a[8],-.66*r+a[1],1.06*r,.22*r);
+    g.bezierCurveTo(-1.16*r,-.06*r,-1.12*r,-.42*r,-.86*r,-.54*r);
+    g.quadraticCurveTo(-.8*r,-.58*r,-.76*r,-.6*r);
+    g.bezierCurveTo(-.9*r,-.78*r,-.62*r,-.98*r,-.22*r,-1.0*r);
+    g.bezierCurveTo(-.04*r,-1.02*r,0,-1.16*r,.18*r,-1.18*r);
+    g.bezierCurveTo(.32*r,-1.19*r,.36*r,-1.06*r,.3*r,-1.0*r);
+    g.bezierCurveTo(.62*r,-.98*r,.88*r,-.84*r,.76*r,-.68*r);
+    g.quadraticCurveTo(.82*r,-.64*r,.9*r,-.58*r);
+    g.bezierCurveTo(1.12*r,-.44*r,1.16*r,-.06*r,1.06*r,.22*r);
     g.closePath();
   };
-  dome();
-  let gr=g.createLinearGradient(-r,-r,r*.9,.4*r);
-  gr.addColorStop(0,f.h);gr.addColorStop(.4,f.c);gr.addColorStop(1,f.d);
+  return g=>{                                 /* a lumpy ball, a little flatter on top where the scoop rolled it */
+    g.beginPath();g.moveTo(-1.06*r,.22*r);
+    g.bezierCurveTo(-1.18*r+a[0],-.24*r+a[1],-1.04*r+a[2],-.8*r+a[3],-.56*r+a[4],-1.02*r+a[5]);
+    g.bezierCurveTo(-.24*r,-1.15*r+a[6],.22*r,-1.15*r+a[7],.56*r+a[8],-1.02*r+a[9]);
+    g.bezierCurveTo(1.04*r+a[10],-.8*r+a[11],1.18*r+a[2],-.24*r+a[0],1.06*r,.22*r);
+    g.closePath();
+  };
+}
+function paintScoop(g,f,cx,cy,r){
+  g.save();g.translate(cx,cy);g.lineJoin='round';g.lineCap='round';
+  if(f.dots==='yogurt')paintSoftServe(g,f,r);else paintIceCream(g,f,r);
+  g.restore();
+}
+function roundness(g,r,k=1){                  /* a soft light on the upper left and a core shadow low on the right */
+  const gr=g.createRadialGradient(-.42*r,-.78*r,.05*r,-.2*r,-.45*r,1.5*r);
+  gr.addColorStop(0,'rgba(255,255,255,'+A3(.22*k)+')');gr.addColorStop(.35,'rgba(255,255,255,0)');
+  gr.addColorStop(.72,'rgba(26,19,71,0)');gr.addColorStop(1,'rgba(26,19,71,'+A3(.26*k)+')');
+  g.fillStyle=gr;g.fillRect(-1.5*r,-1.5*r,3*r,2*r);
+}
+function shine(g,r,x=-.46,y=-.8,k=1){          /* a soft bloom, a crisp streak and a dot */
+  const sg=g.createRadialGradient(x*r,y*r,0,x*r,y*r,.46*r);
+  sg.addColorStop(0,'rgba(255,255,255,'+A3(.4*k)+')');sg.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=sg;g.beginPath();g.ellipse(x*r,y*r,.5*r,.3*r,-.45,0,TAU);g.fill();
+  g.fillStyle='rgba(255,255,255,'+A3(.72*k)+')';g.beginPath();g.ellipse((x-.02)*r,y*r,.24*r,.085*r,-.45,0,TAU);g.fill();
+  g.beginPath();g.arc((x+.33)*r,(y-.15)*r,.045*r,0,TAU);g.fill();
+}
+function paintIceCream(g,f,r){
+  const rn=seeded(f.id.charCodeAt(0)*131+f.id.length*17),j=()=>(rn()-.5)*.13*r,dome=domeOf(f,r),gold=f.dots==='glint';
+  dome(g);
+  let gr=g.createLinearGradient(-r,-r,r*.9,.4*r);gr.addColorStop(0,f.h);gr.addColorStop(.42,f.c);gr.addColorStop(1,f.d);
   g.fillStyle=gr;g.fill();
-  g.save();dome();g.clip();
-  /* scoop-mark ridges: a shadowed groove with a lit edge under it (frozen yogurt is smooth) */
-  if(f.dots!=='yogurt')[[-.8,-.5,.55,.15],[-.48,-.88,.94,.13],[-.15,-1.0,1.0,.09]].forEach(([y,xl,xr,sag])=>{
-    const x0=xl*r+j()*2,x1=xr*r+j()*2,yy=y*r+j();
-    const path=dy=>{g.beginPath();g.moveTo(x0,yy+dy+r*.05);g.quadraticCurveTo((x0+x1)/2,yy+dy-sag*r*2,x1,yy+dy+r*.05)};
-    g.strokeStyle=f.d;g.globalAlpha=.42;g.lineWidth=2.6;path(0);g.stroke();
-    g.strokeStyle=f.h;g.globalAlpha=.7;g.lineWidth=1.7;path(2.2);g.stroke();
+  g.save();dome(g);g.clip();
+  roundness(g,r);
+  /* the curls the scoop leaves: short arcs that follow the ball, staggered like the layers it rolled up, each a shadowed
+     groove with a lit lip under it, torn here and there */
+  [[-.84,-.55,.34,.08],[-.62,.05,.78,.07],[-.5,-.92,-.18,.06],[-.3,-.4,.62,.1],[-.12,-1.02,-.3,.05],[-.08,.42,1.02,.06]].forEach(([y,xl,xr,sag],k)=>{
+    const x0=xl*r+j()*.5,x1=xr*r+j()*.5,yy=y*r+j()*.5,N=6,pts=[];
+    const droop=x=>Math.pow(x/(1.1*r),2)*.32*r;  /* droops toward the sides, the way the ball curves away */
+    for(let i=0;i<=N;i++){const u=i/N,x=lerp(x0,x1,u);pts.push([x,yy+droop(x)-Math.sin(u*Math.PI)*sag*r+(rn()-.5)*.04*r])}
+    const path=dy=>{
+      g.beginPath();g.moveTo(pts[0][0],pts[0][1]+dy);
+      for(let i=1;i<=N;i++)g.quadraticCurveTo(pts[i-1][0],pts[i-1][1]+dy,(pts[i-1][0]+pts[i][0])/2,(pts[i-1][1]+pts[i][1])/2+dy);
+      g.lineTo(pts[N][0],pts[N][1]+dy);
+    };
+    g.strokeStyle=f.d;g.globalAlpha=gold?.3:.38;g.lineWidth=2.6;path(0);g.stroke();
+    g.strokeStyle=f.h;g.globalAlpha=.55;g.lineWidth=1.5;path(2.2);g.stroke();
+    g.strokeStyle=f.d;g.globalAlpha=.3;g.lineWidth=1.1;
+    const p=pts[1+((rn()*(N-2))|0)];g.beginPath();g.moveTo(p[0],p[1]+1);g.lineTo(p[0]+(rn()-.5)*5,p[1]+3+rn()*2.5);g.stroke();
   });
   g.globalAlpha=1;
-  /* flavor texture */
-  g.fillStyle=f.dot;g.strokeStyle=f.dot;
-  if(f.dots==='yogurt'){                      /* a ribbon of plain yogurt swirled through, with a soft shadow under it */
-    const ribbon=(dy,w,col)=>{
-      g.lineWidth=w;g.strokeStyle=col;
-      g.beginPath();g.moveTo(-.95*r,-.28*r+dy);g.bezierCurveTo(-.55*r,-.86*r+dy,.05*r,-.2*r+dy,.5*r,-.78*r+dy);g.stroke();
-      g.beginPath();g.moveTo(-.4*r,.02*r+dy);g.bezierCurveTo(-.05*r,-.42*r+dy,.42*r,-.06*r+dy,.92*r,-.42*r+dy);g.stroke();
-    };
-    ribbon(1.8,3.6,'rgba(26,19,71,.12)');ribbon(0,3.4,'rgba(255,255,255,.88)');
-  }else if(f.dots==='swirl'){
-    g.globalAlpha=.3;g.lineWidth=2.6;
-    g.beginPath();g.arc(.3*r,-.42*r,.3*r,3.3,5.5);g.stroke();
-    g.beginPath();g.arc(-.4*r,-.3*r,.2*r,.8,3.2);g.stroke();
-  }else if(f.dots==='glint'){
-    const sh=g.createLinearGradient(-r,-r,r,.2*r);
-    sh.addColorStop(.35,'rgba(255,255,255,0)');sh.addColorStop(.5,'rgba(255,255,255,.55)');sh.addColorStop(.65,'rgba(255,255,255,0)');
-    g.fillStyle=sh;g.fillRect(-1.3*r,-1.1*r,2.6*r,1.5*r);
-  }else{
-    for(let i=0;i<15;i++){
-      const x=(rn()*1.7-.85)*r,y=-.88*r+rn()*.95*r;
-      g.globalAlpha=.5+rn()*.35;
-      if(f.dots==='chunk')g.fillRect(x-1.8,y-1.5,3.6,3);
-      else{g.beginPath();g.ellipse(x,y,f.dots==='chip'?2.6:1.5,f.dots==='chip'?1.7:1.3,rn()*3,0,TAU);g.fill()}
-    }
+  BITS[f.dots](g,f,r,rn);
+  for(let i=0;i<26;i++){                       /* fine grain: ice crystals and tiny pits */
+    g.globalAlpha=.16+rn()*.2;g.fillStyle=i%2?'#ffffff':f.d;
+    g.beginPath();g.arc((rn()*2-1)*r,-1.05*r+rn()*1.15*r,.4+rn()*.8,0,TAU);g.fill();
   }
+  /* where the lip sits on the ball, reflected light along the shadow side, then the shine */
   g.globalAlpha=1;
-  /* shade the dome where the lip sits on it, then add the highlight */
-  gr=g.createLinearGradient(0,-.15*r,0,.3*r);gr.addColorStop(0,'rgba(26,19,71,0)');gr.addColorStop(1,'rgba(26,19,71,.3)');
-  g.fillStyle=gr;g.fillRect(-1.3*r,-.15*r,2.6*r,.5*r);
-  g.fillStyle='rgba(255,255,255,.62)';
-  g.beginPath();g.ellipse(-.46*r,-.8*r,.26*r,.1*r,-.45,0,TAU);g.fill();
-  g.beginPath();g.arc(-.12*r,-.93*r,.045*r,0,TAU);g.fill();
+  gr=g.createLinearGradient(0,-.2*r,0,.28*r);gr.addColorStop(0,'rgba(26,19,71,0)');gr.addColorStop(1,'rgba(26,19,71,.34)');
+  g.fillStyle=gr;g.fillRect(-1.4*r,-.2*r,2.8*r,.5*r);
+  g.save();g.translate(-1.4,-1.1);dome(g);g.restore();
+  g.strokeStyle=f.h;g.globalAlpha=.28;g.lineWidth=2;g.stroke();g.globalAlpha=1;
+  shine(g,r,-.46,-.8,gold?1:.8);
   g.restore();
-  dome();g.lineWidth=1.6;g.strokeStyle=edge;g.stroke();
-
-  /* ruffled lip */
-  const n=5,L=1.2*r,top=.06*r,by=.52*r,xs=[-L],ys=[],ds=[];
+  dome(g);g.lineWidth=1.6;g.strokeStyle=EDGE;g.stroke();
+  paintLip(g,f,r,rn);
+}
+/* what is in each flavor, painted inside the ball (it is already clipped to it) */
+const BITS={
+  seed(g,f,r,rn){                              /* strawberry: chunks of fruit, and seeds */
+    for(let i=0;i<3;i++){
+      const x=(-.58+i*.55+(rn()-.5)*.22)*r,y=(-.74+rn()*.5)*r,s=3.4+rn()*1.6,pts=[];
+      for(let k=0;k<6;k++){const a=k/6*TAU+rn()*.5;pts.push([x+Math.cos(a)*s*(.7+rn()*.5),y+Math.sin(a)*s*(.6+rn()*.4)])}
+      smoothPath(g,pts);g.fillStyle='#d42a55';g.fill();g.strokeStyle='rgba(120,10,40,.45)';g.lineWidth=1;g.stroke();
+      g.fillStyle='rgba(255,196,210,.8)';g.beginPath();g.ellipse(x-s*.3,y-s*.32,s*.34,s*.17,-.5,0,TAU);g.fill();
+      g.fillStyle='#ffe28a';
+      for(let k=0;k<3;k++){g.beginPath();g.ellipse(x+(rn()-.5)*s,y+(rn()-.2)*s*.8,.75,.45,rn()*3,0,TAU);g.fill()}
+    }
+    g.fillStyle=f.dot;
+    for(let i=0;i<14;i++){g.globalAlpha=.45+rn()*.3;g.beginPath();g.ellipse((rn()*1.8-.9)*r,(-1+rn())*r,1.2,.8,rn()*3,0,TAU);g.fill()}
+    g.globalAlpha=1;
+  },
+  chip(g,f,r,rn){                              /* mint chocolate chip: dark shards, each lit along one edge */
+    for(let i=0;i<12;i++){
+      const x=(rn()*1.8-.9)*r,y=(-1+rn()*1.02)*r,s=2+rn()*1.8,a=rn()*TAU,pts=[];
+      for(let k=0;k<4;k++){const b=a+k/4*TAU+(rn()-.5)*.8;pts.push([x+Math.cos(b)*s*(.6+rn()*.6),y+Math.sin(b)*s*(.5+rn()*.5)])}
+      g.beginPath();pts.forEach((p,k)=>k?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.closePath();
+      g.fillStyle=rn()<.3?'#5a3a28':'#3a2316';g.fill();
+      g.strokeStyle='rgba(255,226,200,.5)';g.lineWidth=.9;g.beginPath();g.moveTo(pts[1][0],pts[1][1]);g.lineTo(pts[2][0],pts[2][1]);g.stroke();
+    }
+  },
+  chunk(g,f,r,rn){                             /* chocolate: fudge chunks with a lit top face, and crumbs */
+    for(let i=0;i<7;i++){
+      const x=(rn()*1.7-.85)*r,y=(-.98+rn()*.95)*r,s=2.6+rn()*1.6,a=(rn()-.5)*.9;
+      g.save();g.translate(x,y);g.rotate(a);
+      rr(g,-s,-s*.8,s*2,s*1.6,1.2);g.fillStyle='#3d2113';g.fill();
+      rr(g,-s,-s*.8,s*2,s*.6,1);g.fillStyle='rgba(255,214,180,.3)';g.fill();
+      g.restore();
+    }
+    g.fillStyle=f.dot;
+    for(let i=0;i<10;i++){g.globalAlpha=.4+rn()*.3;g.fillRect((rn()*1.8-.9)*r,(-1+rn())*r,1.4,1.2)}
+    g.globalAlpha=1;
+  },
+  speck(g,f,r,rn){                             /* vanilla: specks of vanilla bean, in little clusters */
+    g.fillStyle='#5b3a1f';
+    for(let c=0;c<7;c++){
+      const cx=(rn()*1.6-.8)*r,cy=(-.95+rn()*.9)*r;
+      for(let i=0;i<4;i++){g.globalAlpha=.3+rn()*.3;g.beginPath();g.ellipse(cx+(rn()-.5)*16,cy+(rn()-.5)*11,.45+rn()*.5,.3,rn()*3,0,TAU);g.fill()}
+    }
+    g.globalAlpha=1;
+  },
+  swirl(g,f,r,rn){                             /* berry ripple: a deep ribbon through it, and a few berries */
+    const rib=(dy,w,col,al)=>{
+      g.strokeStyle=col;g.globalAlpha=al;g.lineWidth=w;g.beginPath();
+      g.moveTo(-1.05*r,-.4*r+dy);g.bezierCurveTo(-.6*r,-.95*r+dy,-.05*r,-.1*r+dy,.35*r,-.62*r+dy);g.bezierCurveTo(.55*r,-.88*r+dy,.85*r,-.75*r+dy,1.05*r,-.98*r+dy);g.stroke();
+    };
+    rib(0,5,f.dot,.42);rib(-1.6,1.3,f.h,.6);
+    for(let i=0;i<4;i++){
+      const x=(rn()*1.5-.75)*r,y=(-.85+rn()*.7)*r;
+      g.globalAlpha=1;g.fillStyle='#3b2f9a';g.beginPath();g.arc(x,y,2.1,0,TAU);g.fill();
+      g.fillStyle='rgba(255,255,255,.6)';g.beginPath();g.arc(x-.7,y-.7,.6,0,TAU);g.fill();
+    }
+    g.globalAlpha=1;
+  },
+  glint(g,f,r,rn){                             /* gold: a metal sheen and a sprinkle of glitter */
+    const sh=g.createLinearGradient(-r,-r,r,.2*r);
+    sh.addColorStop(.32,'rgba(255,255,255,0)');sh.addColorStop(.48,'rgba(255,255,255,.6)');sh.addColorStop(.56,'rgba(255,250,220,.15)');sh.addColorStop(.7,'rgba(255,255,255,0)');
+    g.fillStyle=sh;g.fillRect(-1.3*r,-1.2*r,2.6*r,1.5*r);
+    for(let i=0;i<7;i++)sparkle(g,(rn()*1.6-.8)*r,(-.95+rn()*.85)*r,1.6+rn()*1.8,rn());
+  },
+};
+function paintLip(g,f,r,rn){                  /* the ruffled lip where the scoop's edge tore away */
+  const n=6,L=1.2*r,top=.06*r,by=.52*r,xs=[-L],ys=[],ds=[];
   const wts=Array.from({length:n},()=>.7+rn()*.7),tot=wts.reduce((p,q)=>p+q,0);
   let acc=0;for(let i=0;i<n;i++){acc+=wts[i];xs.push(-L+2*L*acc/tot)}
   for(let i=0;i<=n;i++)ys.push(by+(rn()-.5)*.12*r);
-  for(let i=0;i<n;i++)ds.push(.17*r+rn()*.2*r);
+  for(let i=0;i<n;i++)ds.push(.15*r+rn()*.18*r);
   const lip=()=>{
     g.beginPath();g.moveTo(-1.02*r,top);
     g.bezierCurveTo(-1.3*r,top-.05*r,-1.4*r,.3*r,xs[0],ys[0]);
@@ -633,24 +724,80 @@ function paintScoop(g,f,cx,cy,r){
   };
   g.save();g.translate(0,3.2);lip();g.fillStyle='rgba(26,19,71,.3)';g.fill();g.restore();   /* shadow cast on the scoop below */
   lip();
-  gr=g.createLinearGradient(0,top-.2*r,0,.95*r);gr.addColorStop(0,f.h);gr.addColorStop(.28,f.c);gr.addColorStop(1,f.d);
+  let gr=g.createLinearGradient(0,top-.2*r,0,.95*r);gr.addColorStop(0,f.h);gr.addColorStop(.3,f.c);gr.addColorStop(1,f.d);
   g.fillStyle=gr;g.fill();
   g.save();lip();g.clip();
-  g.strokeStyle=f.d;g.globalAlpha=.4;g.lineWidth=1.7;
-  for(let i=1;i<n;i++){
-    g.beginPath();g.moveTo(xs[i],ys[i]+.03*r);
-    g.quadraticCurveTo(xs[i]+j(),ys[i]-.16*r,xs[i]+.08*r+j(),top+.14*r);g.stroke();
+  for(let i=0;i<n;i++){                       /* each lobe is round: a soft light on its upper half */
+    const mx=(xs[i]+xs[i+1])/2-(xs[i+1]-xs[i])*.1,w=(xs[i+1]-xs[i])*.62,cy=by-.08*r;
+    gr=g.createRadialGradient(mx,cy,0,mx,cy,w);gr.addColorStop(0,'rgba(255,255,255,.26)');gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr;g.beginPath();g.ellipse(mx,cy,w,w*.7,0,0,TAU);g.fill();
   }
-  g.globalAlpha=.5;g.fillStyle='#fff';
-  for(let i=0;i<n;i++){
-    const w=xs[i+1]-xs[i];
-    g.beginPath();g.ellipse((xs[i]+xs[i+1])/2-w*.1,by+.02*r,w*.2,.045*r,-.12,0,TAU);g.fill();
+  g.strokeStyle=f.d;g.globalAlpha=.42;g.lineWidth=1.7;
+  for(let i=1;i<n;i++){                       /* the folds between lobes */
+    g.beginPath();g.moveTo(xs[i],ys[i]+.03*r);g.quadraticCurveTo(xs[i]+(rn()-.5)*.1*r,ys[i]-.14*r,xs[i]+.06*r+(rn()-.5)*.08*r,top+.2*r);g.stroke();
   }
+  g.globalAlpha=.55;g.fillStyle='#fff';
+  for(let i=0;i<n;i++){const w=xs[i+1]-xs[i];g.beginPath();g.ellipse((xs[i]+xs[i+1])/2-w*.12,by+.01*r,w*.2,.045*r,-.12,0,TAU);g.fill()}
+  g.globalAlpha=1;
   g.restore();
-  lip();g.lineWidth=1.6;g.strokeStyle=edge;g.stroke();
+  lip();g.lineWidth=1.6;g.strokeStyle=EDGE;g.stroke();
   g.beginPath();g.moveTo(-1.02*r,top);g.quadraticCurveTo(0,top-.22*r,1.02*r,top);
-  g.strokeStyle='rgba(26,19,71,.22)';g.lineWidth=1.3;g.stroke();
+  g.strokeStyle='rgba(26,19,71,.24)';g.lineWidth=1.3;g.stroke();
+}
+function paintSoftServe(g,f,r){
+  const dome=domeOf(f,r);
+  dome(g);
+  let gr=g.createLinearGradient(-r,-1.2*r,r*.9,.4*r);gr.addColorStop(0,f.h);gr.addColorStop(.5,f.c);gr.addColorStop(1,f.d);
+  g.fillStyle=gr;g.fill();
+  g.save();dome(g);g.clip();
+  roundness(g,r,.8);
+  const curve=(c,dy=0)=>{g.beginPath();g.moveTo(c[0]*r,c[1]*r+dy);g.quadraticCurveTo(c[2]*r,c[3]*r+dy,c[4]*r,c[5]*r+dy)};
+  /* the creases where each coil sits on the one below: the coil above overhangs, so the one below is shaded under it */
+  [[-.76,-.62,0,-.34,.8,-.66],[-.24,-1.0,.04,-.88,.32,-1.0]].forEach(c=>{
+    g.strokeStyle='rgba(26,19,71,.14)';g.lineWidth=7;curve(c,3.5);g.stroke();
+    g.strokeStyle=f.d;g.globalAlpha=.65;g.lineWidth=2.4;curve(c);g.stroke();
+    g.strokeStyle='#ffffff';g.globalAlpha=.4;g.lineWidth=1.2;curve(c,-1.8);g.stroke();
+    g.globalAlpha=1;
+  });
+  /* the twist: a band of white yogurt wound round each coil */
+  [[-1.1,-.08,0,.14,1.1,-.32],[-.8,-.76,0,-.5,.82,-.8]].forEach(c=>{
+    g.strokeStyle='rgba(26,19,71,.1)';g.lineWidth=4.4;curve(c,1.8);g.stroke();
+    g.strokeStyle='rgba(255,255,255,.85)';g.lineWidth=3.6;curve(c);g.stroke();
+  });
+  /* the fold under the knob, and a wet sheen along each coil */
+  g.strokeStyle=f.d;g.globalAlpha=.45;g.lineWidth=1.5;curve([.02,-1.04,.16,-.98,.3,-1.04]);g.stroke();
+  g.globalAlpha=1;g.strokeStyle='rgba(255,255,255,.6)';g.lineWidth=2;
+  curve([-.84,-.36,-.55,-.24,-.24,-.26]);g.stroke();
+  curve([-.6,-.84,-.42,-.95,-.18,-.94]);g.stroke();
+  gr=g.createLinearGradient(0,-.2*r,0,.28*r);gr.addColorStop(0,'rgba(26,19,71,0)');gr.addColorStop(1,'rgba(26,19,71,.28)');
+  g.fillStyle=gr;g.fillRect(-1.4*r,-.2*r,2.8*r,.5*r);
+  g.fillStyle='rgba(255,255,255,.8)';
+  g.beginPath();g.ellipse(.1*r,-1.12*r,.07*r,.035*r,-.4,0,TAU);g.fill();
+  g.beginPath();g.arc(-.62*r,-.48*r,.04*r,0,TAU);g.fill();
   g.restore();
+  dome(g);g.lineWidth=1.6;g.strokeStyle=EDGE;g.stroke();
+  /* a smooth rolled rim instead of a ruffle */
+  const top=.06*r,by=.46*r;
+  const rim=()=>{
+    g.beginPath();g.moveTo(-1.02*r,top);
+    g.bezierCurveTo(-1.28*r,top-.04*r,-1.32*r,.3*r,-1.06*r,by);
+    g.bezierCurveTo(-.7*r,by+.16*r,-.3*r,by+.12*r,0,by+.08*r);
+    g.bezierCurveTo(.3*r,by+.12*r,.7*r,by+.16*r,1.06*r,by);
+    g.bezierCurveTo(1.32*r,.3*r,1.28*r,top-.04*r,1.02*r,top);
+    g.quadraticCurveTo(0,top-.22*r,-1.02*r,top);
+    g.closePath();
+  };
+  g.save();g.translate(0,3.2);rim();g.fillStyle='rgba(26,19,71,.3)';g.fill();g.restore();   /* shadow cast on the scoop below */
+  rim();
+  gr=g.createLinearGradient(0,top-.2*r,0,by+.16*r);gr.addColorStop(0,f.h);gr.addColorStop(.4,f.c);gr.addColorStop(1,f.d);
+  g.fillStyle=gr;g.fill();
+  g.save();rim();g.clip();
+  g.strokeStyle='rgba(26,19,71,.1)';g.lineWidth=4;curve([-1.3,.22,0,.46,1.3,.18],1.6);g.stroke();   /* the twist carries on round the rim */
+  g.strokeStyle='rgba(255,255,255,.8)';g.lineWidth=3.2;curve([-1.3,.22,0,.46,1.3,.18]);g.stroke();
+  g.restore();
+  rim();g.lineWidth=1.6;g.strokeStyle=EDGE;g.stroke();
+  g.beginPath();g.moveTo(-1.02*r,top);g.quadraticCurveTo(0,top-.22*r,1.02*r,top);
+  g.strokeStyle='rgba(26,19,71,.24)';g.lineWidth=1.3;g.stroke();
 }
 
 
@@ -659,19 +806,11 @@ function paintScoop(g,f,cx,cy,r){
    flavor (it has to follow that flavor's dome outline) and stamped on top of the scoop. The chocolate shell is
    the same kind of layer: lighter, harder, covering the whole dome down to the lip, set before it could drip far. */
 function paintCoat(g,kind,f,cx,cy,r){
-  const rn=seeded(f.id.charCodeAt(0)*977+f.id.length*31),j=()=>(rn()-.5)*.13*r;
-  const a=[j(),j(),j(),j(),j(),j(),j(),j(),j()];                    /* the same dome outline paintScoop drew (keep in step with it) */
-  const fud=kind==='fudge',hard=kind==='shell';
+  const fud=kind==='fudge',hard=kind==='shell',top=domeOf(f,r),dome=()=>top(g);   /* the same outline paintScoop drew */
   const P=hard?{hi:'#b4733f',mid:'#7a4321',lo:'#45210d',line:'rgba(30,12,4,.9)',gloss:'rgba(255,244,228,.95)'}
     :fud?{hi:'#5e3018',mid:'#3b1a0b',lo:'#210d04',line:'rgba(20,8,2,.85)',gloss:'rgba(255,232,205,.8)'}
     :{hi:'#ff6384',mid:'#e8264f',lo:'#ac1238',line:'rgba(78,4,26,.8)',gloss:'rgba(255,255,255,.85)'};
   g.save();g.translate(cx,cy);g.lineJoin='round';g.lineCap='round';
-  const dome=()=>{
-    g.beginPath();g.moveTo(-1.06*r,.22*r);
-    g.bezierCurveTo(-1.16*r+a[0],-.66*r+a[1],-.66*r+a[2],-1.13*r+a[3],a[4]*.5,-1.1*r+a[5]);
-    g.bezierCurveTo(.66*r+a[6],-1.13*r+a[7],1.16*r+a[8],-.66*r+a[1],1.06*r,.22*r);
-    g.closePath();
-  };
   const yb=hard?x=>(-.09+.11*(x/r)*(x/r))*r+Math.sin(x/r*5+.5)*.02*r               /* the shell stops just above the ruffled lip */
     :x=>-.5*r+Math.sin(x/r*4.2+1.2)*.08*r+Math.sin(x/r*9.5+.3)*.035*r;              /* wavy lower edge of the cap: the lower dome keeps its flavor color */
   const cap=()=>{g.beginPath();g.moveTo(-1.5*r,-1.5*r);for(let x=-1.5*r;x<=1.5*r+.1;x+=.1*r)g.lineTo(x,yb(x));g.lineTo(1.5*r,-1.5*r);g.closePath()};
@@ -3091,7 +3230,7 @@ resize();
 new ResizeObserver(resize).observe(cv);
 buildLives();menuReady=true;menuDemo(demoScoops());drawIcons();
 try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(()=>{drawIcons();resize();warmBanner(G.mi)})}catch(e){}
-if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawnOne,shadowed,Input,FROYO,scoopStep,extraStep,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,streakMult,JUNK,JSPR,stampJunk,stampScoop,catchTopping,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
+if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawnOne,shadowed,Input,FROYO,GOLD,scoopStep,extraStep,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,streakMult,JUNK,JSPR,stampJunk,stampScoop,catchTopping,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
 requestAnimationFrame(frame);
 })();
 </script>
