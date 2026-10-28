@@ -82,6 +82,10 @@ body{
 .buff .bt{min-width:2ch;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--cream)}
 .buff.low{animation:buffLow .55s ease-in-out infinite}
 @keyframes buffLow{50%{opacity:.45}}
+/* frozen yogurt: the cone is slowed */
+.buff.slow{border-color:#bfe3ff;box-shadow:0 0 14px rgba(170,215,255,.55)}
+.buff.slow .bx{font-size:18px;color:#e4f4ff}
+.buff.slow .bar b{background:linear-gradient(90deg,#9fd3ff,#f2faff)}
 /* chocolate shell: blocks the next junk */
 .shellb{
   display:flex;align-items:center;gap:5px;align-self:flex-start;margin-top:8px;padding:2px 12px 2px 4px;border-radius:999px;
@@ -139,6 +143,7 @@ body{
 }
 .legend{display:grid;gap:10px;margin:0;padding:0;list-style:none}
 .legend li{display:flex;align-items:center;gap:12px;font-size:15px;line-height:1.25;font-weight:700}
+.legend li[hidden]{display:none}
 .legend b{color:var(--gold);font-weight:800}
 .ico{flex:none;width:46px;height:46px}
 .btn{
@@ -252,6 +257,7 @@ body{
       <span class="sub" id="height">0 scoops</span>
       <span class="streak" id="streak" hidden><b id="streakN">0</b>in a row<i id="streakX" hidden>x2</i></span>
       <span class="buff" id="buff" hidden role="status" aria-label="Strawberry syrup boost"><span class="bx" id="buffX">2x</span><i class="bar"><b id="buffBar"></b></i><span class="bt" id="buffTxt">8s</span></span>
+      <span class="buff slow" id="slow" hidden role="status" aria-label="Frozen yogurt: steering slowed"><span class="bx">Slow</span><i class="bar"><b id="slowBar"></b></i><span class="bt" id="slowTxt">4s</span></span>
       <span class="shellb" id="shellB" hidden role="status" aria-label="Chocolate shell: blocks the next junk"><canvas class="ico" data-ico="shell" width="92" height="92"></canvas>Shell</span>
     </div>
     <button class="chip" id="recenter" type="button" hidden>Recenter tilt</button>
@@ -273,6 +279,7 @@ body{
       <li><canvas class="ico" data-ico="streak" width="92" height="92"></canvas><span><b id="streakLegend">10 in a row</b>, any flavor, doubles your points. Keep going for more.</span></li>
       <li><canvas class="ico" data-ico="gold" width="92" height="92"></canvas><span><b>Gold scoops</b> add 5 to the multiplier.</span></li>
       <li><canvas class="ico" data-ico="junk" width="92" height="92"></canvas><span><b>Junk</b> costs a life. You start with <span id="lifeWord">three</span>.</span></li>
+      <li id="legendYo"><canvas class="ico" data-ico="froyo" width="92" height="92"></canvas><span><b>Frozen yogurt</b> looks like ice cream but slows you down.</span></li>
     </ul>
     <ul class="tops" aria-label="Toppings">
       <li><canvas class="ico" data-ico="fudge" width="92" height="92"></canvas><span><b>Hot fudge</b><br>+1 life</span></li>
@@ -382,6 +389,12 @@ const CONFIG={
     gap:[.2,1.3],                            /* how far above or below the scoop, in scoop radii */
     lead:.4                                  /* odds the junk is just below the scoop (a careful lean dodges it) rather than just above */
   },
+  froyo:{                                    /* frozen yogurt: a hazard that looks a lot like a scoop, and falls like one */
+    chance:.07,                              /* odds that a scoop is frozen yogurt instead */
+    minScoops:8,                             /* none until the stack is this tall */
+    slow:.45,                                /* catching it slows the cone to this share of its speed... */
+    duration:4                               /* ...for this many seconds. It stacks, but scores nothing */
+  },
   chance:{
     gold:.065,                               /* odds that a scoop is gold */
     fudge:.09,                               /* odds that one of the extras is hot fudge (only while you have fewer than max lives) */
@@ -414,6 +427,11 @@ const CONFIG={
     every:10,                                /* each this many in a row adds 1 to the streak multiplier (x2 at 10, x3 at 20...) */
     max:5                                    /* highest streak multiplier */
   },
+  keys:{                                     /* arrow keys */
+    speed:560,                               /* how fast they slide the cone */
+    sway:1.8                                 /* how much harder the stack sways than when you drag: keys glide at one even
+                                                speed, which on its own barely rocks it */
+  },
   music:{
     volume:.075,                             /* loudness of the songs, 0 to 1. The sound effects are soft, so keep this low enough
                                                 for them to stand out (.075 puts the songs a little under the loudest catches) */
@@ -434,8 +452,12 @@ const LEADERBOARD={
 
 /* ============================ PATCH NOTES ============================
    Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
-const VERSION='1.14';
+const VERSION='1.15';
 const PATCH_NOTES=[
+  {v:'1.15',title:'Frozen yogurt',items:[
+    'Watch out for frozen yogurt. It falls like a scoop and looks a lot like one, just paler, smoother and swirled with white.',
+    'Catch it and your cone goes sluggish for 4 seconds. It still stacks, but scores nothing and leaves your multiplier and streak alone. Let it fall and nothing happens.',
+    'Steering with the arrow keys now sways the stack as much as dragging does.']},
   {v:'1.14',title:'Sneaky junk, chocolate shell',items:[
     'Now and then junk falls stuck to a scoop, right beside it and just above or below. Junk below can be dodged with a careful lean. Junk above, tucked in close, comes with the scoop whatever you do.',
     'Letting one of those scoops go does not end your streak.',
@@ -518,6 +540,15 @@ const FLAVORS=[
   {id:'blue', c:'#938ff7',d:'#5650cc',h:'#d4d2ff',dot:'#2f2a8f',dots:'swirl'},
 ];
 const GOLD={id:'gold',c:'#ffd54d',d:'#d98c0a',h:'#fff7c2',dot:'#fff2a0',dots:'glint'};
+/* frozen yogurt: a paler twin of each flavor, smooth (no scoop marks) and swirled with white, so it passes for ice cream at a glance */
+const FROYO={
+  straw:{id:'fy-straw',c:'#ffb3ca',d:'#e2819f',h:'#fff0f5',dots:'yogurt'},
+  mint: {id:'fy-mint', c:'#b2eed9',d:'#74c9ab',h:'#f0fffa',dots:'yogurt'},
+  choc: {id:'fy-choc', c:'#c29c86',d:'#8c6651',h:'#eedccf',dots:'yogurt'},
+  van:  {id:'fy-van',  c:'#fbf5e2',d:'#d9cca6',h:'#ffffff',dots:'yogurt'},
+  blue: {id:'fy-blue', c:'#c6c3fb',d:'#8f8be0',h:'#f1f0ff',dots:'yogurt'},
+};
+const YOGURT=Object.values(FROYO);
 
 const seeded=s=>()=>{s=(s*1664525+1013904223)>>>0;return s/4294967296};
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
@@ -543,8 +574,8 @@ function paintScoop(g,f,cx,cy,r){
   gr.addColorStop(0,f.h);gr.addColorStop(.4,f.c);gr.addColorStop(1,f.d);
   g.fillStyle=gr;g.fill();
   g.save();dome();g.clip();
-  /* scoop-mark ridges: a shadowed groove with a lit edge under it */
-  [[-.8,-.5,.55,.15],[-.48,-.88,.94,.13],[-.15,-1.0,1.0,.09]].forEach(([y,xl,xr,sag])=>{
+  /* scoop-mark ridges: a shadowed groove with a lit edge under it (frozen yogurt is smooth) */
+  if(f.dots!=='yogurt')[[-.8,-.5,.55,.15],[-.48,-.88,.94,.13],[-.15,-1.0,1.0,.09]].forEach(([y,xl,xr,sag])=>{
     const x0=xl*r+j()*2,x1=xr*r+j()*2,yy=y*r+j();
     const path=dy=>{g.beginPath();g.moveTo(x0,yy+dy+r*.05);g.quadraticCurveTo((x0+x1)/2,yy+dy-sag*r*2,x1,yy+dy+r*.05)};
     g.strokeStyle=f.d;g.globalAlpha=.42;g.lineWidth=2.6;path(0);g.stroke();
@@ -553,7 +584,14 @@ function paintScoop(g,f,cx,cy,r){
   g.globalAlpha=1;
   /* flavor texture */
   g.fillStyle=f.dot;g.strokeStyle=f.dot;
-  if(f.dots==='swirl'){
+  if(f.dots==='yogurt'){                      /* a ribbon of plain yogurt swirled through, with a soft shadow under it */
+    const ribbon=(dy,w,col)=>{
+      g.lineWidth=w;g.strokeStyle=col;
+      g.beginPath();g.moveTo(-.95*r,-.28*r+dy);g.bezierCurveTo(-.55*r,-.86*r+dy,.05*r,-.2*r+dy,.5*r,-.78*r+dy);g.stroke();
+      g.beginPath();g.moveTo(-.4*r,.02*r+dy);g.bezierCurveTo(-.05*r,-.42*r+dy,.42*r,-.06*r+dy,.92*r,-.42*r+dy);g.stroke();
+    };
+    ribbon(1.8,3.6,'rgba(26,19,71,.12)');ribbon(0,3.4,'rgba(255,255,255,.88)');
+  }else if(f.dots==='swirl'){
     g.globalAlpha=.3;g.lineWidth=2.6;
     g.beginPath();g.arc(.3*r,-.42*r,.3*r,3.3,5.5);g.stroke();
     g.beginPath();g.arc(-.4*r,-.3*r,.2*r,.8,3.2);g.stroke();
@@ -918,9 +956,9 @@ const TOPS={
 const SPW=R*3.1,SPH=R*2.8,SCX=SPW/2,SCY=R*1.35,SS=3,JW=R*2.8;
 function canvasFor(w,h){const c=document.createElement('canvas');c.width=Math.ceil(w*SS);c.height=Math.ceil(h*SS);const g=c.getContext('2d');g.scale(SS,SS);return[c,g]}
 const SPR={};
-[...FLAVORS,GOLD].forEach(f=>{const[c,g]=canvasFor(SPW,SPH);paintScoop(g,f,SCX,SCY,R);SPR[f.id]=c});
+[...FLAVORS,GOLD,...YOGURT].forEach(f=>{const[c,g]=canvasFor(SPW,SPH);paintScoop(g,f,SCX,SCY,R);SPR[f.id]=c});
 const COAT={fudge:{},syrup:{},shell:{}};
-['fudge','syrup','shell'].forEach(k=>[...FLAVORS,GOLD].forEach(f=>{const[c,g]=canvasFor(SPW,SPH);paintCoat(g,k,f,SCX,SCY,R);COAT[k][f.id]=c}));
+['fudge','syrup','shell'].forEach(k=>[...FLAVORS,GOLD,...YOGURT].forEach(f=>{const[c,g]=canvasFor(SPW,SPH);paintCoat(g,k,f,SCX,SCY,R);COAT[k][f.id]=c}));
 const JSPR=JUNK.map(fn=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);fn(g,R);return c});
 const TSPR={};
 Object.keys(TOPS).forEach(k=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);TOPS[k](g,R);TSPR[k]=c});
@@ -1410,7 +1448,7 @@ const Tower=(()=>{
 /* ---------- game state ---------- */
 const G={state:'menu',t:0,score:0,best:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,cam:0,alt:0,
   shake:0,flash:0,menuLift:0,next:{at:0,x:0},extraT:0,pending:null,bestMult:1,tall:0,overT:0,overShown:false,mi:0,frame:0,
-  syrupT:0,shield:0,shell:null,burst:null,since:{fudge:0,syrup:0,shell:0,cherry:0},hole:null,zone:null,zoneN:0,whiteout:0,
+  syrupT:0,slowT:0,shield:0,shell:null,burst:null,since:{fudge:0,syrup:0,shell:0,cherry:0},hole:null,zone:null,zoneN:0,whiteout:0,
   streak:0,bestStreak:0,streakRecord:0};
 const cone={x:195,v:0,af:0,target:195};
 let stack=[],items=[],debris=[],parts=[],pops=[];
@@ -1440,8 +1478,19 @@ function pop(text,x,y,c='#fff6e4',s=24){pops.push({text,x,y,c,s,l:0,m:1.05})}
 function ring(x,y,c){parts.push({x,y,ring:true,l:.45,m:.45,c,s:10})}
 
 /* ---------- scoring ---------- */
+function stackOn(it,dx,f){                  /* a caught scoop (or frozen yogurt) joins the top of the stack */
+  const n=stack.length;
+  Tower.resize(n,n+1);
+  const sc={f,jx:0,px:it.x,sq:0,sqv:11};
+  if(it.coat)sc.coat={k:it.coat.k,t:.6};    /* zone scoops arrive sauced: the coat just wobbles as it lands */
+  stack.push(sc);
+  if(G.shell)G.shell.t=Math.min(G.shell.t,.55);   /* the shell always sits on the top scoop: it settles over the new one */
+  sc.jx=it.x-(cone.x+Tower.off(n,n+1));
+  Tower.kick(dx*.9*n/(n+5));
+  G.tall=Math.max(G.tall,stack.length);
+}
 function landScoop(it,dx){
-  const gold=it.kind==='gold',n=stack.length;
+  const gold=it.kind==='gold';
   if(gold){G.mult+=5;G.grace=true}
   else{
     if(G.lastFlavor&&it.f===G.lastFlavor)G.mult+=1;
@@ -1450,14 +1499,7 @@ function landScoop(it,dx){
   }
   G.streak++;G.bestStreak=Math.max(G.bestStreak,G.streak);
   const sm=streakMult(),pts=10*G.mult*sm*syrupMult();G.score+=pts;G.bestMult=Math.max(G.bestMult,G.mult);
-  Tower.resize(n,n+1);
-  const sc={f:gold?GOLD:it.f,jx:0,px:it.x,sq:0,sqv:11};
-  if(it.coat)sc.coat={k:it.coat.k,t:.6};    /* zone scoops arrive sauced: the coat just wobbles as it lands */
-  stack.push(sc);
-  if(G.shell)G.shell.t=Math.min(G.shell.t,.55);   /* the shell always sits on the top scoop: it settles over the new one */
-  sc.jx=it.x-(cone.x+Tower.off(n,n+1));
-  Tower.kick(dx*.9*n/(n+5));
-  G.tall=Math.max(G.tall,stack.length);
+  stackOn(it,dx,gold?GOLD:it.f);
   const col=gold?['#ffd54d','#fff7c2','#ffffff']:[it.f.c,it.f.h,'#ffffff'];
   spark(it.x,it.y,col,gold?26:12,gold?330:230,.7,4);
   if(gold){ring(it.x,it.y,'#ffd54d');flashC='255,213,77';G.flash=Math.max(G.flash,.25);pop('GOLD +5',it.x,it.y-28,'#ffd54d',30);sfxGold()}
@@ -1469,6 +1511,17 @@ function landScoop(it,dx){
     pop(G.streak+' IN A ROW! x'+sm,it.x,it.y-74,'#72e6c3',26);
     spark(it.x,it.y,['#72e6c3','#d2fff0','#ffffff'],18,300,.7,4);ring(it.x,it.y,'#72e6c3');sfxStreak(sm);
   }
+  milestone();
+}
+/* ---------- frozen yogurt ----------
+   It falls like a scoop and stacks like one, but it is not ice cream: it scores nothing, leaves the multiplier and the
+   streak alone, and leaves the cone sluggish for a few seconds. Letting it fall costs nothing. */
+const slowK=()=>G.slowT>0?lerp(1,CONFIG.froyo.slow,Math.min(1,G.slowT/.5)):1;   /* eases back to full speed in the last half second */
+function landFroyo(it,dx){
+  stackOn(it,dx,it.f);
+  G.slowT=CONFIG.froyo.duration;            /* catching another while it runs just refills the timer */
+  spark(it.x,it.y,[it.f.c,it.f.h,'#ffffff','#cfeaff'],16,200,.75,4);ring(it.x,it.y,'#dff1ff');
+  pop('Fro-yo! Slow',it.x,it.y-24,'#dff1ff',28);sfxFroyo();
   milestone();
 }
 /* ---------- streak: scoops caught in a row, any flavor ----------
@@ -1515,7 +1568,7 @@ function crackShell(it){                   /* the chocolate shell takes the hit 
 }
 function gameOver(){
   G.state='over';G.overT=0;G.overShown=false;
-  G.burst=null;G.shield=0;G.shell=null;G.syrupT=0;G.zone=null;G.hole=null;
+  G.burst=null;G.shield=0;G.shell=null;G.syrupT=0;G.slowT=0;G.zone=null;G.hole=null;
   for(let i=lowVisible(stack.length);i<stack.length;i++)debrisFrom(stack[i],i);   /* scoops below the screen just go */
   stack.length=0;items.length=0;Tower.reset();settled=0;
   if(G.score>G.best){G.best=G.score;G.newBest=true;try{localStorage.setItem('scooper.best',String(G.best))}catch(e){}}
@@ -1574,7 +1627,7 @@ function burstStart(it,gold=false){          /* gold: the zone's jackpot, a much
 function clearForBurst(){
   const C=CONFIG.cherry,quiet=C.burstScoops*C.burstInterval+.5,L=sy(centerH(stack.length));
   for(const it of items){                    /* marked here, swept out after this frame's pass over the falling things */
-    if((it.kind!=='scoop'&&it.kind!=='gold')||it.zone||(L-it.y)/it.vy>quiet)continue;
+    if((it.kind!=='scoop'&&it.kind!=='gold'&&it.kind!=='froyo')||it.zone||(L-it.y)/it.vy>quiet)continue;
     const f=it.kind==='gold'?GOLD:it.f;
     spark(it.x,it.y,[f.c,f.h,'#ffffff'],12,200,.55,4);ring(it.x,it.y,'#ffffffaa');
     it.poof=true;
@@ -1682,7 +1735,7 @@ function zoneSeq(total,k){                   /* where each scoop falls, and the 
 function zoneStart(h){
   const C=CONFIG.zone,k=G.zoneN++,x=holeX(h),hh=centerH(h.n),y=sy(hh);
   const total=Math.min(C.maxScoops,C.scoops+k*C.morePerZone);
-  G.hole=null;
+  G.hole=null;G.slowT=0;                     /* the zone starts you at full speed */
   G.zone={phase:'in',t:0,hx:x,hh,seq:zoneSeq(total,k),i:0,total,caught:0,missed:false,won:false,
     v:Math.min(C.fallMax,C.fall+k*C.fallPerZone),flavor:G.lastFlavor||FLAVORS[(Math.random()*FLAVORS.length)|0],   /* one flavor: catch them all for a long streak */
     bn:0,nb:0,vb:0,bus:null,ac0:null,gc:null,ct:0,rays:0,outT:0};
@@ -1884,7 +1937,8 @@ function restartDrops(delay){                        /* a fresh start: at the be
 function scoopStep(){
   const P=G.next,v=dropSpeed();
   if(G.t<P.at-fallTime(v))return;
-  const kind=Math.random()<CONFIG.chance.gold?'gold':'scoop',S=CONFIG.shadow;
+  const S=CONFIG.shadow,F=CONFIG.froyo;
+  const kind=stack.length>=F.minScoops&&G.slowT<=0&&Math.random()<F.chance?'froyo':Math.random()<CONFIG.chance.gold?'gold':'scoop';
   if(kind==='scoop'&&stack.length>=S.minScoops&&Math.random()<S.chance)shadowed(P.x,v);
   else spawnOne(kind,P.x,v);
   const gap=scoopGap(),d=Math.min(W,CONFIG.drops.reach*gap),at=Math.max(P.at+gap,G.t+fallTime(v)+.05);   /* never schedule one in the past */
@@ -1923,7 +1977,7 @@ function pickExtra(){
 }
 function arrivals(){                               /* the scoops still to come: when each reaches the stack, and where, soonest first */
   const L=landLine(),list=[];
-  for(const i of items)if((i.kind==='scoop'||i.kind==='gold')&&!i.bounced&&i.ab!==false)list.push({at:G.t+(L-i.y)/i.vy,x:i.x});
+  for(const i of items)if((i.kind==='scoop'||i.kind==='gold'||i.kind==='froyo')&&!i.bounced&&i.ab!==false)list.push({at:G.t+(L-i.y)/i.vy,x:i.x});
   list.push({at:G.next.at,x:G.next.x});
   return list.sort((a,b)=>a.at-b.at);
 }
@@ -1960,11 +2014,12 @@ function extraStep(dt){
   }else G.extraT=.05;
 }
 function spawnOne(kind,x,vy){
-  const n=stack.length,scoop=kind==='scoop'||kind==='gold';
-  const swA=scoop||kind==='cherry'||n<=10?0:rnd(0,Math.min(18,n*.4));   /* scoops and the cherry fall straight; the rest wobble a little */
+  const n=stack.length,scoop=kind==='scoop'||kind==='gold'||kind==='froyo';
+  const swA=scoop||kind==='cherry'||n<=10?0:rnd(0,Math.min(18,n*.4));   /* scoops (fro-yo too) and the cherry fall straight; the rest wobble a little */
   if(kind==='cherry')sfxAlert();
   let f=FLAVORS[(Math.random()*FLAVORS.length)|0];
-  if(G.lastFlavor&&Math.random()<.3)f=G.lastFlavor;   /* keep flavor runs within reach */
+  if(G.lastFlavor&&Math.random()<.3)f=G.lastFlavor;   /* keep flavor runs within reach (and fro-yo can pass for the flavor you are on) */
+  if(kind==='froyo')f=FROYO[f.id];
   const it={kind,f,bx:x,x,y:-R*2-10,vy,vx:0,rot:rnd(0,TAU),vr:kind==='cherry'?rnd(-1.2,1.2):rnd(-3.5,3.5),
     sw:rnd(0,TAU),swA,type:(Math.random()*JUNK.length)|0,bounced:false,age:0};
   items.push(it);
@@ -1997,9 +2052,9 @@ function updateStack(dt){
   }
 }
 function coneStep(dt,desired){
-  const des=clamp(desired,M,W-M);
-  const wantV=clamp((des-cone.x)*16,-1150,1150);
-  const dv=clamp(wantV-cone.v,-6200*dt,6200*dt);
+  const des=clamp(desired,M,W-M),k=slowK();   /* frozen yogurt caps both the cone's speed and how hard it can speed up or stop */
+  const wantV=clamp((des-cone.x)*16,-1150*k,1150*k);
+  const dv=clamp(wantV-cone.v,-6200*k*dt,6200*k*dt);
   cone.v+=dv;cone.x=clamp(cone.x+cone.v*dt,M,W-M);
   cone.af+=((dv/dt)-cone.af)*Math.min(1,dt*28);
 }
@@ -2007,7 +2062,8 @@ const reach=it=>it.zone?R*CONFIG.zone.catchWidth:it.kind==='junk'?R*1.1:it.kind=
 function playStep(dt){
   coneStep(dt,steerTarget(dt));
   const n=stack.length;
-  if(G.burst)Tower.reset();else Tower.step(n,G.zone?cone.af*.5:cone.af,G.t,dt);   /* the stack sways half as much in the zone */
+  const acc=cone.af*(Input.via==='keys'?CONFIG.keys.sway:1);   /* keys glide evenly, so they rock the stack harder */
+  if(G.burst)Tower.reset();else Tower.step(n,G.zone?acc*.5:acc,G.t,dt);   /* the stack sways half as much in the zone */
   updateStack(dt);
 
   const S=G.since;S.fudge+=dt;S.syrup+=dt;S.shell+=dt;S.cherry+=dt;
@@ -2017,6 +2073,11 @@ function playStep(dt){
     G.syrupT=Math.max(0,G.syrupT-dt);
     if(G.syrupT===0)tone(520,.25,'sine',.06,260);
     else if(n&&Math.random()<dt*7){const top=stack[n-1];spark(top.px+rnd(-22,22),sy(centerH(n-1))-R*.5,['#ff7aa6','#ffb3cc','#ffffff'],1,70,.9,3.5,-90)}
+  }
+  if(G.slowT>0){                             /* frozen yogurt: a chilly mist drifts down off the top of the stack */
+    G.slowT=Math.max(0,G.slowT-dt);
+    if(G.slowT===0)sfxThaw();
+    else if(Math.random()<dt*9){const top=stack[n-1];spark((top?top.px:cone.x)+rnd(-26,26),(n?sy(centerH(n-1)):sy(CH))+rnd(0,R*.6),['#ffffff','#e4f4ff','#c7e6ff'],1,40,1.1,3.5,60)}
   }
 
   if(!G.zone)holeStep();
@@ -2041,6 +2102,7 @@ function playStep(dt){
             else hitJunk(it);
           }
           else if(it.kind==='scoop'||it.kind==='gold'){landScoop(it,dx);if(it.zone)zoneCatch()}
+          else if(it.kind==='froyo')landFroyo(it,dx);
           else catchTopping(it);
           items.splice(k,1);
           if(G.state!=='play')break;
@@ -2104,7 +2166,7 @@ function startGame(){
   stack=[];items=[];debris=[];parts=[];pops=[];Tower.reset();settled=0;BAN.img=null;
   Object.assign(G,{state:'play',score:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,alt:0,extraT:0,pending:null,
     bestMult:1,tall:0,mi:0,shake:0,flash:0,overT:0,overShown:false,newBest:false,
-    syrupT:0,shield:0,shell:null,burst:null,since:{fudge:0,syrup:0,shell:0,cherry:0},hole:makeHole(CONFIG.zone.first),zone:null,zoneN:0,whiteout:0,
+    syrupT:0,slowT:0,shield:0,shell:null,burst:null,since:{fudge:0,syrup:0,shell:0,cherry:0},hole:makeHole(CONFIG.zone.first),zone:null,zoneN:0,whiteout:0,
     streak:0,bestStreak:0});
   cone.x=W/2;cone.v=0;cone.af=0;cone.target=W/2;
   restartDrops(.9);
@@ -2482,6 +2544,7 @@ function drawIcons(){
     else if(k==='streak'){stampScoop(g,FLAVORS[1],23,38,0,0,.4);stampScoop(g,FLAVORS[4],23,26,0,0,.4);stampScoop(g,FLAVORS[3],23,14,0,0,.4)}
     else if(k==='gold'){stampScoop(g,GOLD,23,25,0,0,.56);sparkle(g,38,9,5,.4);sparkle(g,7,12,3.5,0)}
     else if(k==='junk'){stampJunk(g,0,15,16,-.3,.52);stampJunk(g,4,32,31,.5,.52)}      /* pickle and mustard */
+    else if(k==='froyo')stampScoop(g,FROYO.straw,23,25,0,0,.56);
     else if(TSPR[k])stampTop(g,k,23,24,0,.66);
   });
 }
@@ -2569,6 +2632,8 @@ function sfxFudge(){tone(330,.14,'sine',.1,520);tone(520,.22,'sine',.09,780,.1)}
 function sfxSyrup(){[0,4,7,11].forEach((s,i)=>tone(660*Math.pow(2,s/12),.15,'sine',.07,0,i*.06))}
 function sfxZap(){tone(900,.15,'sawtooth',.05,170)}
 function sfxShell(){tone(196,.2,'sine',.09,392);tone(587,.14,'triangle',.05,0,.14);tone(784,.2,'triangle',.045,0,.22)}   /* poured on, and it sets */
+function sfxFroyo(){tone(330,.32,'sine',.09,140);tone(165,.4,'triangle',.05,95,.06)}   /* a dull, sinking plop */
+function sfxThaw(){tone(392,.16,'triangle',.05,784)}             /* full speed again */
 function sfxCrack(){tone(2400,.05,'square',.035,800);tone(1500,.07,'square',.03,320,.035);tone(160,.2,'triangle',.08,70)}   /* the shell cracks off */
 function sfxAlert(){tone(1320,.18,'sine',.05,640)}            /* a cherry just appeared up top */
 function sfxBurstStart(){tone(260,.35,'triangle',.08,880)}
@@ -2629,21 +2694,21 @@ const Settings={controls:HAS_TILT&&IS_TOUCH?'tilt':'touch',music:true};
 try{const v=localStorage.getItem('scooper.controls');if(v==='tilt'||v==='touch')Settings.controls=v}catch(e){}
 try{Settings.music=localStorage.getItem('scooper.music')!=='off'}catch(e){}
 const tiltLive=()=>Tilt.bound&&Tilt.neutral!==null&&performance.now()-Tilt.last<500;
-const Input={ptr:null,startX:0,startCone:0,l:false,r:false};
+const Input={ptr:null,startX:0,startCone:0,l:false,r:false,via:null};   /* via: what steered last ('keys', 'ptr' or 'tilt') */
 function steerTarget(dt){
   if(Input.ptr!==null)return cone.target;
   if(Settings.controls==='tilt'&&tiltLive()){
     cone.target=W/2+clamp((Tilt.v-Tilt.neutral)/TILT_RANGE,-1,1)*(W/2-M);
-    return cone.target;
+    Input.via='tilt';return cone.target;
   }
   const dir=(Input.r?1:0)-(Input.l?1:0);
-  if(dir)cone.target=clamp(cone.target+dir*560*dt,M,W-M);
+  if(dir){cone.target=clamp(cone.target+dir*CONFIG.keys.speed*dt,M,W-M);Input.via='keys'}
   return cone.target;
 }
 addEventListener('pointerdown',e=>{
   if(G.state!=='play'||(e.target.closest&&e.target.closest('button')))return;
   if(Settings.controls==='tilt'&&tiltLive())return;           /* Tilt mode: the phone steers, not your finger */
-  Input.ptr=e.pointerId;Input.startX=e.clientX;Input.startCone=cone.x;cone.target=cone.x;
+  Input.ptr=e.pointerId;Input.startX=e.clientX;Input.startCone=cone.x;cone.target=cone.x;Input.via='ptr';
   try{e.target.setPointerCapture(e.pointerId)}catch(err){}   /* keep the drag if the pointer leaves the window */
 });
 addEventListener('pointermove',e=>{
@@ -2669,8 +2734,8 @@ addEventListener('keyup',e=>{
 /* ---------- interface ---------- */
 const el={score:$('#score'),height:$('#height'),lives:$('#lives'),toast:$('#toast'),banner:$('#banner'),recenter:$('#recenter'),
   menu:$('#menu'),over:$('#over'),hud:$('#hud'),hint:$('#hint'),buff:$('#buff'),buffBar:$('#buffBar'),buffTxt:$('#buffTxt'),buffX:$('#buffX'),
-  streak:$('#streak'),streakN:$('#streakN'),streakX:$('#streakX'),shell:$('#shellB')};
-let hs=-1,hn=-1,hl=-1,hk=-1,toastT=0,buffOn=false,buffS=-1,shellOn=false,cornerOn=null,zKey='';
+  streak:$('#streak'),streakN:$('#streakN'),streakX:$('#streakX'),shell:$('#shellB'),slow:$('#slow'),slowBar:$('#slowBar'),slowTxt:$('#slowTxt')};
+let hs=-1,hn=-1,hl=-1,hk=-1,toastT=0,buffOn=false,buffS=-1,shellOn=false,slowOn=false,slowS=-1,cornerOn=null,zKey='';
 const zm={box:$('#zmeter'),txt:$('#ztxt'),pips:$('#zpips')};
 function buildLives(){                          /* one slot per possible life; empty slots show room for hot fudge */
   const slots=Math.max(CONFIG.lives.max,CONFIG.lives.start),perRow=slots<=3?slots:Math.ceil(slots/2);
@@ -2708,6 +2773,13 @@ function hudUpdate(){
     const s=Math.ceil(G.syrupT);
     if(s!==buffS){buffS=s;el.buffTxt.textContent=s+'s'}
     el.buff.classList.toggle('low',G.syrupT<2.5);
+  }
+  const sl=G.state==='play'&&G.slowT>0;                     /* frozen yogurt timer */
+  if(sl!==slowOn){slowOn=sl;el.slow.hidden=!sl;slowS=-1}
+  if(sl){
+    el.slowBar.style.transform='scaleX('+(G.slowT/CONFIG.froyo.duration).toFixed(3)+')';
+    const s=Math.ceil(G.slowT);
+    if(s!==slowS){slowS=s;el.slowTxt.textContent=s+'s'}
   }
   const sh=G.state==='play'&&!!G.shell;                     /* chocolate shell badge */
   if(sh!==shellOn){shellOn=sh;el.shell.hidden=!sh}
@@ -2750,7 +2822,7 @@ function begin(){
   if(Settings.controls==='tilt')enableTilt();   /* must be called inside the tap on iPhone */
   startGame();
   el.menu.hidden=true;el.over.hidden=true;el.hud.hidden=false;
-  hs=hn=hl=hk=-1;buffOn=false;buffS=-1;el.buff.hidden=true;shellOn=false;el.shell.hidden=true;el.height.textContent='0 scoops';zKey='';zm.box.hidden=true;
+  hs=hn=hl=hk=-1;buffOn=false;buffS=-1;el.buff.hidden=true;shellOn=false;el.shell.hidden=true;slowOn=false;slowS=-1;el.slow.hidden=true;el.height.textContent='0 scoops';zKey='';zm.box.hidden=true;
   try{if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}
   setTimeout(()=>tiltNotice(0),1500);
 }
@@ -2985,6 +3057,12 @@ function demoScoops(){
   const avail=(sh.getBoundingClientRect().top-tg.getBoundingClientRect().bottom)/scale;   /* room between the tagline and the sheet */
   return clamp(Math.floor((avail-100)/SP),0,3);
 }
+function fitLegend(){                        /* the frozen yogurt line shows only if it still leaves room for the demo cone */
+  const yo=$('#legendYo'),sh=document.querySelector('#menu .sheet'),tg=document.querySelector('#menu .tag');
+  if(!yo||!sh||!tg||el.menu.hidden)return;
+  yo.hidden=false;
+  yo.hidden=(sh.getBoundingClientRect().top-tg.getBoundingClientRect().bottom)/scale<100;   /* short phones: it is in the patch notes and obvious in play */
+}
 function resize(){
   const cw=Math.max(1,cv.clientWidth),ch=Math.max(1,cv.clientHeight);
   dpr=Math.min(2,window.devicePixelRatio||1);
@@ -2992,6 +3070,7 @@ function resize(){
   scale=Math.min(cw/390,ch/700);
   FW=cw/scale;H=ch/scale;W=Math.min(FW,480);offX=(FW-W)/2;
   SB=Math.min(60,($('#safe')?$('#safe').offsetHeight:0)/scale);
+  fitLegend();
   const sh=document.querySelector('#menu .sheet');
   G.menuLift=sh?Math.max(0,sh.offsetHeight/scale-34+10):0;
   banCache.clear();holeSign=null;
@@ -3012,7 +3091,7 @@ resize();
 new ResizeObserver(resize).observe(cv);
 buildLives();menuReady=true;menuDemo(demoScoops());drawIcons();
 try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(()=>{drawIcons();resize();warmBanner(G.mi)})}catch(e){}
-if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawnOne,shadowed,scoopStep,extraStep,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,streakMult,JUNK,JSPR,stampJunk,stampScoop,catchTopping,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
+if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawnOne,shadowed,Input,FROYO,scoopStep,extraStep,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,streakMult,JUNK,JSPR,stampJunk,stampScoop,catchTopping,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
 requestAnimationFrame(frame);
 })();
 </script>
