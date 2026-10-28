@@ -82,6 +82,15 @@ body{
 .buff .bt{min-width:2ch;font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--cream)}
 .buff.low{animation:buffLow .55s ease-in-out infinite}
 @keyframes buffLow{50%{opacity:.45}}
+/* chocolate shell: blocks the next junk */
+.shellb{
+  display:flex;align-items:center;gap:5px;align-self:flex-start;margin-top:8px;padding:2px 12px 2px 4px;border-radius:999px;
+  background:rgba(26,19,71,.84);border:2px solid #c4834f;box-shadow:0 0 14px rgba(196,131,79,.5);
+  font-family:var(--display);font-size:18px;line-height:1;color:#f2c9a0;animation:shellIn .45s ease-out;
+}
+.shellb[hidden]{display:none}
+.shellb .ico{width:28px;height:28px}
+@keyframes shellIn{0%{transform:scale(.5)}45%{transform:scale(1.18)}100%{transform:none}}
 /* Ultimate Sundae Zone: one pip per scoop that falls in the zone */
 .zmeter{
   align-self:center;display:flex;flex-direction:column;align-items:center;gap:6px;padding:6px 14px 8px;border-radius:16px;
@@ -222,13 +231,13 @@ body{
 .rank{margin:0;text-align:center;font-size:14px;line-height:1.35}
 
 /* toppings strip on the start sheet */
-.tops{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0;padding:10px 4px 0;list-style:none;border-top:1.5px solid rgba(255,246,228,.14)}
-.tops li{display:flex;flex-direction:column;align-items:center;gap:1px;text-align:center;font-size:12.5px;line-height:1.2;font-weight:700}
+.tops{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin:0;padding:10px 4px 0;list-style:none;border-top:1.5px solid rgba(255,246,228,.14)}
+.tops li{display:flex;align-items:center;gap:8px;min-width:0;font-size:12.5px;line-height:1.2;font-weight:700}
 .tops b{color:var(--gold);font-weight:800;font-size:13px}
-.tops .ico{width:40px;height:40px}
+.tops .ico{width:36px;height:36px}
 @media (max-height:700px){.tops{display:none}}      /* short phones: the toppings are in the patch notes and obvious in play */
 
-@media (prefers-reduced-motion:reduce){.toast{transition:none}.buff.low{animation:none}.streak.pop b{animation:none}.life.gain{animation:none}.icon-btn{transition:none}}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}.buff.low{animation:none}.shellb{animation:none}.streak.pop b{animation:none}.life.gain{animation:none}.icon-btn{transition:none}}
 </style>
 </head>
 <body>
@@ -243,6 +252,7 @@ body{
       <span class="sub" id="height">0 scoops</span>
       <span class="streak" id="streak" hidden><b id="streakN">0</b>in a row<i id="streakX" hidden>x2</i></span>
       <span class="buff" id="buff" hidden role="status" aria-label="Strawberry syrup boost"><span class="bx" id="buffX">2x</span><i class="bar"><b id="buffBar"></b></i><span class="bt" id="buffTxt">8s</span></span>
+      <span class="shellb" id="shellB" hidden role="status" aria-label="Chocolate shell: blocks the next junk"><canvas class="ico" data-ico="shell" width="92" height="92"></canvas>Shell</span>
     </div>
     <button class="chip" id="recenter" type="button" hidden>Recenter tilt</button>
     <div class="lives" id="lives" aria-label="Lives left"></div>
@@ -267,6 +277,7 @@ body{
     <ul class="tops" aria-label="Toppings">
       <li><canvas class="ico" data-ico="fudge" width="92" height="92"></canvas><span><b>Hot fudge</b><br>+1 life</span></li>
       <li><canvas class="ico" data-ico="syrup" width="92" height="92"></canvas><span><b>Syrup</b><br><span id="tSyrup">2x score</span></span></li>
+      <li><canvas class="ico" data-ico="shell" width="92" height="92"></canvas><span><b>Choc shell</b><br>Blocks 1 junk</span></li>
       <li><canvas class="ico" data-ico="cherry" width="92" height="92"></canvas><span><b>Cherry</b><br><span id="tCherry">+10 scoops</span></span></li>
     </ul>
     <button class="btn" id="play" type="button">Start scooping</button>
@@ -363,14 +374,24 @@ const CONFIG={
     gapEndScoops:120,                        /* the stack height where they reach gapEnd */
     speed:[.75,1.3]                          /* each one falls at the scoop speed times a random number in this range */
   },
+  shadow:{                                   /* now and then junk falls glued to a scoop, so that scoop is hard or impossible to catch */
+    chance:.12,                              /* odds that a plain scoop brings junk along */
+    minScoops:10,                            /* none until the stack is this tall */
+    side:[.3,1.05],                          /* how far beside the scoop the junk falls, in scoop radii (junk reaches 1.1, so junk
+                                                above always lands on the scoop you just caught) */
+    gap:[.2,1.3],                            /* how far above or below the scoop, in scoop radii */
+    lead:.4                                  /* odds the junk is just below the scoop (a careful lean dodges it) rather than just above */
+  },
   chance:{
     gold:.065,                               /* odds that a scoop is gold */
     fudge:.09,                               /* odds that one of the extras is hot fudge (only while you have fewer than max lives) */
     syrup:.08,                               /* strawberry syrup (never while a boost is running) */
+    shell:.07,                               /* chocolate shell (never while you already have one) */
     cherry:.05                               /* cherry: rare. Every extra that is not a topping is junk */
   },
   fudge:{minGap:18,pointsAtMax:50},          /* minGap: least seconds between fudges. pointsAtMax: bonus if already at max lives */
   syrup:{duration:8,multiplier:2,minGap:20}, /* multiplier applies to every point you earn while it runs */
+  shell:{minGap:25},                         /* least seconds between chocolate shells. A shell lasts until junk hits it */
   cherry:{
     speedMult:1.8,maxSpeed:850,              /* falls this many times faster than normal, but never faster than maxSpeed */
     catchWidth:1.5,                          /* how forgiving the catch is, in scoop radii (normal scoops use 1.3) */
@@ -413,8 +434,12 @@ const LEADERBOARD={
 
 /* ============================ PATCH NOTES ============================
    Newest first. Add an entry on top for each update and bump VERSION: the notes icon shows a dot until it is opened. */
-const VERSION='1.13';
+const VERSION='1.14';
 const PATCH_NOTES=[
+  {v:'1.14',title:'Sneaky junk, chocolate shell',items:[
+    'Now and then junk falls stuck to a scoop, right beside it and just above or below. Junk below can be dodged with a careful lean. Junk above, tucked in close, comes with the scoop whatever you do.',
+    'Letting one of those scoops go does not end your streak.',
+    'New topping: chocolate shell. Catch it and a hard chocolate coat sets on top of your stack. The next junk you catch cracks the shell instead of costing a life, so you keep your scoop, your multiplier and your streak.']},
   {v:'1.13',title:'Cherry clears the way',items:[
     'Catching a cherry clears away scoops that would land during the burst, so they no longer break your streak. The next scoop waits until the burst is done.',
     'The game over screen now shows your longest streak, in gold when it beats your record.']},
@@ -593,13 +618,15 @@ function paintScoop(g,f,cx,cy,r){
 
 /* ---------- sauce: what hot fudge and strawberry syrup leave on the scoop they land on ----------
    A glossy cap poured over the dome with drips running down past the ruffled lip. Drawn as its own layer per
-   flavor (it has to follow that flavor's dome outline) and stamped on top of the scoop. */
+   flavor (it has to follow that flavor's dome outline) and stamped on top of the scoop. The chocolate shell is
+   the same kind of layer: lighter, harder, covering the whole dome down to the lip, set before it could drip far. */
 function paintCoat(g,kind,f,cx,cy,r){
   const rn=seeded(f.id.charCodeAt(0)*977+f.id.length*31),j=()=>(rn()-.5)*.13*r;
   const a=[j(),j(),j(),j(),j(),j(),j(),j(),j()];                    /* the same dome outline paintScoop drew (keep in step with it) */
-  const fud=kind==='fudge';
-  const P=fud?{hi:'#5e3018',mid:'#3b1a0b',lo:'#210d04',line:'rgba(20,8,2,.85)',gloss:'rgba(255,232,205,.8)'}
-             :{hi:'#ff6384',mid:'#e8264f',lo:'#ac1238',line:'rgba(78,4,26,.8)',gloss:'rgba(255,255,255,.85)'};
+  const fud=kind==='fudge',hard=kind==='shell';
+  const P=hard?{hi:'#b4733f',mid:'#7a4321',lo:'#45210d',line:'rgba(30,12,4,.9)',gloss:'rgba(255,244,228,.95)'}
+    :fud?{hi:'#5e3018',mid:'#3b1a0b',lo:'#210d04',line:'rgba(20,8,2,.85)',gloss:'rgba(255,232,205,.8)'}
+    :{hi:'#ff6384',mid:'#e8264f',lo:'#ac1238',line:'rgba(78,4,26,.8)',gloss:'rgba(255,255,255,.85)'};
   g.save();g.translate(cx,cy);g.lineJoin='round';g.lineCap='round';
   const dome=()=>{
     g.beginPath();g.moveTo(-1.06*r,.22*r);
@@ -607,9 +634,11 @@ function paintCoat(g,kind,f,cx,cy,r){
     g.bezierCurveTo(.66*r+a[6],-1.13*r+a[7],1.16*r+a[8],-.66*r+a[1],1.06*r,.22*r);
     g.closePath();
   };
-  const yb=x=>-.5*r+Math.sin(x/r*4.2+1.2)*.08*r+Math.sin(x/r*9.5+.3)*.035*r;       /* wavy lower edge of the cap: the lower dome keeps its flavor color */
+  const yb=hard?x=>(-.09+.11*(x/r)*(x/r))*r+Math.sin(x/r*5+.5)*.02*r               /* the shell stops just above the ruffled lip */
+    :x=>-.5*r+Math.sin(x/r*4.2+1.2)*.08*r+Math.sin(x/r*9.5+.3)*.035*r;              /* wavy lower edge of the cap: the lower dome keeps its flavor color */
   const cap=()=>{g.beginPath();g.moveTo(-1.5*r,-1.5*r);for(let x=-1.5*r;x<=1.5*r+.1;x+=.1*r)g.lineTo(x,yb(x));g.lineTo(1.5*r,-1.5*r);g.closePath()};
-  const D=[[-.7,.5,.22],[-.22,.8,.25],[.32,.4,.21],[.76,.64,.23]];                  /* x, how far down, width (in scoop radii) */
+  const D=hard?[[-.6,.3,.2],[-.02,.38,.22],[.58,.26,.2]]                             /* x, how far down, width (in scoop radii) */
+    :[[-.7,.5,.22],[-.22,.8,.25],[.32,.4,.21],[.76,.64,.23]];
   const drip=([xr,er,wr])=>{
     const X=xr*r,W=wr*r,y0=yb(X)-.14*r,y1=er*r;
     g.beginPath();g.moveTo(X-W/2,y0);g.lineTo(X-W/2,y1-W/2);g.arc(X,y1-W/2,W/2,Math.PI,0,true);g.lineTo(X+W/2,y0);g.closePath();
@@ -625,7 +654,14 @@ function paintCoat(g,kind,f,cx,cy,r){
   g.beginPath();g.ellipse(-.5*r,-.82*r,.3*r,.1*r,-.45,0,TAU);g.fill();
   g.beginPath();g.arc(-.1*r,-.95*r,.05*r,0,TAU);g.fill();
   g.globalAlpha=.35;g.beginPath();g.ellipse(.45*r,-.66*r,.2*r,.06*r,.35,0,TAU);g.fill();g.globalAlpha=1;
-  if(!fud){                                                                          /* strawberry seeds */
+  if(hard){                                                                          /* a hard shine: a long glint round the dome and a lit edge */
+    g.strokeStyle=P.gloss;g.lineWidth=2.4;g.beginPath();g.arc(0,-.12*r,.86*r,3.5,4.25);g.stroke();
+    g.globalAlpha=.6;g.lineWidth=1.6;g.beginPath();g.arc(0,-.12*r,.86*r,5.35,5.7);g.stroke();
+    g.globalAlpha=.4;g.strokeStyle='#ffd9b0';g.lineWidth=1.4;g.beginPath();
+    for(let x=-1.1*r;x<=1.1*r+.1;x+=.1*r){const y=yb(x)-2.2;x>-1.1*r?g.lineTo(x,y):g.moveTo(x,y)}
+    g.stroke();g.globalAlpha=1;
+  }
+  if(kind==='syrup'){                                                                /* strawberry seeds */
     const sr=seeded(77);g.fillStyle='rgba(255,228,120,.92)';
     for(let i=0;i<9;i++){g.beginPath();g.ellipse((sr()*1.7-.85)*r,(-1+sr()*.7)*r,1.7,1.1,sr()*3,0,TAU);g.fill()}
   }
@@ -838,6 +874,28 @@ const TOPS={
     g.beginPath();g.moveTo(-r*.2,-r*.62);g.lineTo(-r*.09,-r*1.04);g.lineTo(r*.09,-r*1.04);g.lineTo(r*.2,-r*.62);g.closePath();g.fill();g.stroke();
     rr(g,-r*.26,-r*.72,r*.52,r*.17,3);g.fill();g.stroke();
   },
+  shell(g,r){                                 /* chocolate shell: a shield of hard chocolate, molded in squares like a bar */
+    g.lineJoin='round';g.lineCap='round';
+    const w=r*.86,t=-r*.8,b=r*1.04;
+    const shield=()=>{
+      g.beginPath();g.moveTo(-w,t);
+      g.quadraticCurveTo(-w*.5,t-r*.2,0,t-r*.08);g.quadraticCurveTo(w*.5,t-r*.2,w,t);   /* a gently arched top edge */
+      g.bezierCurveTo(w*1.04,r*.2,w*.62,r*.74,0,b);g.bezierCurveTo(-w*.62,r*.74,-w*1.04,r*.2,-w,t);
+      g.closePath();
+    };
+    shield();const gr=g.createLinearGradient(-w,t,w,b);gr.addColorStop(0,'#c4834f');gr.addColorStop(.42,'#7a4321');gr.addColorStop(1,'#3b1a0b');
+    g.fillStyle=gr;g.fill();
+    g.save();shield();g.clip();
+    const groove=(x0,y0,x1,y1)=>{                /* the mold's grooves: a dark cut with a lit edge under it */
+      g.beginPath();g.moveTo(x0,y0);g.lineTo(x1,y1);g.strokeStyle='rgba(24,9,2,.62)';g.lineWidth=2.6;g.stroke();
+      g.beginPath();g.moveTo(x0+1.7,y0+1.7);g.lineTo(x1+1.7,y1+1.7);g.strokeStyle='rgba(255,214,170,.34)';g.lineWidth=1.3;g.stroke();
+    };
+    groove(0,t-r*.3,0,b+3);groove(-w-3,-r*.16,w+3,-r*.16);groove(-w-3,r*.44,w+3,r*.44);
+    g.fillStyle='rgba(255,255,255,.45)';g.beginPath();g.ellipse(-w*.52,-r*.48,r*.1,r*.22,.2,0,TAU);g.fill();   /* gloss */
+    g.beginPath();g.arc(w*.42,-r*.56,r*.06,0,TAU);g.fill();
+    g.restore();
+    shield();g.lineWidth=2.4;g.strokeStyle=INK;g.stroke();
+  },
   cherry(g,r,P=['#ff8a9c','#e8203f','#9c0f2b']){   /* a pair of cherries on one stem (the zone's gold cherry passes a gold palette) */
     g.lineJoin='round';g.lineCap='round';
     const cs=[[-r*.42,r*.4,r*.46],[r*.42,r*.5,r*.5]],tx=0,ty=-r*.95;
@@ -861,22 +919,25 @@ const SPW=R*3.1,SPH=R*2.8,SCX=SPW/2,SCY=R*1.35,SS=3,JW=R*2.8;
 function canvasFor(w,h){const c=document.createElement('canvas');c.width=Math.ceil(w*SS);c.height=Math.ceil(h*SS);const g=c.getContext('2d');g.scale(SS,SS);return[c,g]}
 const SPR={};
 [...FLAVORS,GOLD].forEach(f=>{const[c,g]=canvasFor(SPW,SPH);paintScoop(g,f,SCX,SCY,R);SPR[f.id]=c});
-const COAT={fudge:{},syrup:{}};
-['fudge','syrup'].forEach(k=>[...FLAVORS,GOLD].forEach(f=>{const[c,g]=canvasFor(SPW,SPH);paintCoat(g,k,f,SCX,SCY,R);COAT[k][f.id]=c}));
+const COAT={fudge:{},syrup:{},shell:{}};
+['fudge','syrup','shell'].forEach(k=>[...FLAVORS,GOLD].forEach(f=>{const[c,g]=canvasFor(SPW,SPH);paintCoat(g,k,f,SCX,SCY,R);COAT[k][f.id]=c}));
 const JSPR=JUNK.map(fn=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);fn(g,R);return c});
 const TSPR={};
 Object.keys(TOPS).forEach(k=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);TOPS[k](g,R);TSPR[k]=c});
 const GCH=(()=>{const[c,g]=canvasFor(JW,JW);g.translate(JW/2,JW/2);TOPS.cherry(g,R,['#fffbe0','#ffd54d','#b9770a']);return c})();   /* the gold cherry */
 
-function stampScoop(g,f,x,y,sq=0,rot=0,s=1,coat=null){
+function stampScoop(g,f,x,y,sq=0,rot=0,s=1,coat=null,shell=null){
   g.save();g.translate(x,y);if(rot)g.rotate(rot);g.scale((1+sq*.12)*s,(1-sq*.12)*s);
   g.drawImage(SPR[f.id],-SCX,-SCY,SPW,SPH);
-  if(coat){                                    /* the sauce is poured on: it spreads down from the top of the dome with a little overshoot */
-    const u=Math.min(1,coat.t),p=1+2.4*Math.pow(u-1,3)+1.4*Math.pow(u-1,2);
-    g.globalAlpha=Math.min(1,u*7);
-    g.translate(0,-1.1*R);g.scale(1,Math.max(.05,p));g.translate(0,1.1*R);
-    g.drawImage(COAT[coat.k][f.id],-SCX,-SCY,SPW,SPH);
-  }
+  if(coat)pour(g,f,coat);
+  if(shell)pour(g,f,shell);                    /* the chocolate shell sets over any sauce */
+  g.restore();
+}
+function pour(g,f,coat){                       /* the sauce is poured on: it spreads down from the top of the dome with a little overshoot */
+  const u=Math.min(1,coat.t),p=1+2.4*Math.pow(u-1,3)+1.4*Math.pow(u-1,2);
+  g.save();g.globalAlpha=Math.min(1,u*7);
+  g.translate(0,-1.1*R);g.scale(1,Math.max(.05,p));g.translate(0,1.1*R);
+  g.drawImage(COAT[coat.k][f.id],-SCX,-SCY,SPW,SPH);
   g.restore();
 }
 function stampJunk(g,type,x,y,rot,s=1){
@@ -1349,7 +1410,7 @@ const Tower=(()=>{
 /* ---------- game state ---------- */
 const G={state:'menu',t:0,score:0,best:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,cam:0,alt:0,
   shake:0,flash:0,menuLift:0,next:{at:0,x:0},extraT:0,pending:null,bestMult:1,tall:0,overT:0,overShown:false,mi:0,frame:0,
-  syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0},hole:null,zone:null,zoneN:0,whiteout:0,
+  syrupT:0,shield:0,shell:null,burst:null,since:{fudge:0,syrup:0,shell:0,cherry:0},hole:null,zone:null,zoneN:0,whiteout:0,
   streak:0,bestStreak:0,streakRecord:0};
 const cone={x:195,v:0,af:0,target:195};
 let stack=[],items=[],debris=[],parts=[],pops=[];
@@ -1393,6 +1454,7 @@ function landScoop(it,dx){
   const sc={f:gold?GOLD:it.f,jx:0,px:it.x,sq:0,sqv:11};
   if(it.coat)sc.coat={k:it.coat.k,t:.6};    /* zone scoops arrive sauced: the coat just wobbles as it lands */
   stack.push(sc);
+  if(G.shell)G.shell.t=Math.min(G.shell.t,.55);   /* the shell always sits on the top scoop: it settles over the new one */
   sc.jx=it.x-(cone.x+Tower.off(n,n+1));
   Tower.kick(dx*.9*n/(n+5));
   G.tall=Math.max(G.tall,stack.length);
@@ -1410,7 +1472,8 @@ function landScoop(it,dx){
   milestone();
 }
 /* ---------- streak: scoops caught in a row, any flavor ----------
-   Missing a scoop or catching junk ends it. Scoops fall one at a time and always within reach, so every one can be caught. */
+   Missing a scoop or catching junk ends it. Scoops fall one at a time and always within reach, so every one can be caught,
+   except one with junk stuck to it: letting that one go is forgiven. */
 function streakEnd(){
   if(G.streak>=5){
     const n=stack.length,top=stack[n-1];
@@ -1441,9 +1504,18 @@ function zapJunk(it){                      /* the cherry shield: junk fizzles in
   spark(it.x,it.y,['#aef3ff','#ffffff','#ff9ec0'],16,300,.5,4);ring(it.x,it.y,'#aef3ff');
   pop('Zap!',it.x,it.y-30,'#aef3ff',26);sfxZap();
 }
+function crackShell(it){                   /* the chocolate shell takes the hit and cracks off: no life, scoop or streak lost */
+  G.shell=null;
+  const n=stack.length,top=stack[n-1],x=top?top.px:cone.x,y=top?sy(centerH(n-1))-(top.dy||0)-R*.45:sy(CH);
+  if(top)top.sqv=Math.max(top.sqv,10);
+  spark(x,y,['#45210d','#7a4321','#b4733f','#e0a878'],26,330,.8,5.5);ring(x,y,'#e0a878');
+  Tower.kick((it.x<x?1:-1)*8);
+  G.shake=Math.max(G.shake,reduce?0:.25);
+  pop('Crack!',it.x,it.y-60,'#f2c9a0',28);sfxCrack();   /* above the points of a scoop caught at the same moment */
+}
 function gameOver(){
   G.state='over';G.overT=0;G.overShown=false;
-  G.burst=null;G.shield=0;G.syrupT=0;G.zone=null;G.hole=null;
+  G.burst=null;G.shield=0;G.shell=null;G.syrupT=0;G.zone=null;G.hole=null;
   for(let i=lowVisible(stack.length);i<stack.length;i++)debrisFrom(stack[i],i);   /* scoops below the screen just go */
   stack.length=0;items.length=0;Tower.reset();settled=0;
   if(G.score>G.best){G.best=G.score;G.newBest=true;try{localStorage.setItem('scooper.best',String(G.best))}catch(e){}}
@@ -1470,6 +1542,12 @@ function catchTopping(it){
     pop(CONFIG.syrup.multiplier+'x score!',x,y-32,'#ffb3cc',30);
     spark(x,y,['#ff7aa6','#ffb3cc','#ffffff'],24,300,.8,4);ring(x,y,'#ff9ec0');
     flashC='255,140,180';G.flash=Math.max(G.flash,.16);coatTop('syrup');sfxSyrup();
+  }else if(k==='shell'){                     /* drawn over the top scoop until junk cracks it (see drawTower) */
+    G.shell={k:'shell',t:0};
+    pop('Choc shell!',x,y-32,'#f2c9a0',30);
+    spark(x,y,['#45210d','#7a4321','#b4733f','#ffffff'],20,260,.75,4);ring(x,y,'#e0a878');
+    if(stack.length)stack[stack.length-1].sqv=Math.max(stack[stack.length-1].sqv,9);
+    sfxShell();
   }else if(k==='cherry')burstStart(it);
 }
 
@@ -1789,7 +1867,8 @@ function zoneVis(z){                         /* how far the zone look is faded i
    arrives at the stack, not when it is dropped, so the spacing holds when the speed changes with your multiplier.
    Junk and toppings come on their own random clock. Junk falls at random speeds and never lands in a scoop's lane as
    that scoop arrives; toppings land between two scoops on the way from one to the next. So you never have to choose
-   between a scoop and something else. */
+   between a scoop and something else, with one exception: now and then a scoop brings junk along, stuck to it (see
+   shadowed). */
 const landLine=()=>GROUND()-centerH(stack.length)+camGoal();   /* the top of the stack once the camera settles */
 const fallTime=v=>(landLine()+R*2+10)/v;   /* seconds from the top of the screen to the top of the stack */
 const scoopGap=()=>{const D=CONFIG.drops;return Math.max(D.gapMin,D.gapStart-stack.length*D.gapPerScoop)};
@@ -1805,7 +1884,9 @@ function restartDrops(delay){                        /* a fresh start: at the be
 function scoopStep(){
   const P=G.next,v=dropSpeed();
   if(G.t<P.at-fallTime(v))return;
-  spawnOne(Math.random()<CONFIG.chance.gold?'gold':'scoop',P.x,v);
+  const kind=Math.random()<CONFIG.chance.gold?'gold':'scoop',S=CONFIG.shadow;
+  if(kind==='scoop'&&stack.length>=S.minScoops&&Math.random()<S.chance)shadowed(P.x,v);
+  else spawnOne(kind,P.x,v);
   const gap=scoopGap(),d=Math.min(W,CONFIG.drops.reach*gap),at=Math.max(P.at+gap,G.t+fallTime(v)+.05);   /* never schedule one in the past */
   const L=landLine(),junk=items.filter(i=>i.kind==='junk'&&!i.bounced&&i.ab!==false).map(i=>({at:G.t+(L-i.y)/i.vy,x:i.x}));
   let x=P.x;
@@ -1815,15 +1896,29 @@ function scoopStep(){
   }
   P.x=x;P.at=at;
 }
+/* A scoop with junk stuck to it: both fall at one speed, the junk a little to one side and just above or below, so
+   they overlap all the way down. Junk below lands first and a careful lean slips past it onto the scoop. Junk above
+   lands just after: if it is tucked in close, the scoop you just caught is right under it, so that scoop cannot be
+   had without the junk (or a shield, or a chocolate shell). Letting it go does not end your streak. */
+function shadowed(x,v){
+  const S=CONFIG.shadow,off=rnd(S.side[0],S.side[1])*R,dy=rnd(S.gap[0],S.gap[1])*R;
+  let side=Math.random()<.5?-1:1;
+  if(x+side*off<R+10||x+side*off>W-R-10)side=-side;  /* toward the open side, never squashed against a wall */
+  const s=spawnOne('scoop',x,v),j=spawnOne('junk',clamp(x+side*off,R+10,W-R-10),v);
+  (Math.random()<S.lead?s:j).y-=dy;                  /* whichever is behind starts higher, off the top of the screen */
+  j.swA=0;                                           /* no wobble: it stays stuck */
+  s.shadow=true;
+}
 function pickExtra(){
   const C=CONFIG.chance,S=G.since,n=stack.length;
   const can={
     cherry:n>=CONFIG.cherry.minScoops&&S.cherry>=CONFIG.cherry.minGap&&!G.burst&&!items.some(i=>i.kind==='cherry'),
     fudge:G.lives<CONFIG.lives.max&&S.fudge>=CONFIG.fudge.minGap,        /* no point dropping fudge when you are full */
-    syrup:G.syrupT<=0&&S.syrup>=CONFIG.syrup.minGap                     /* and no syrup while a boost is running */
+    syrup:G.syrupT<=0&&S.syrup>=CONFIG.syrup.minGap,                    /* and no syrup while a boost is running */
+    shell:!G.shell&&S.shell>=CONFIG.shell.minGap&&!items.some(i=>i.kind==='shell')   /* one shell at a time */
   };
   let u=Math.random();
-  for(const k of ['cherry','fudge','syrup']){const p=can[k]?C[k]:0;if(u<p)return k;u-=p}
+  for(const k of ['cherry','fudge','syrup','shell']){const p=can[k]?C[k]:0;if(u<p)return k;u-=p}
   return 'junk';
 }
 function arrivals(){                               /* the scoops still to come: when each reaches the stack, and where, soonest first */
@@ -1870,8 +1965,10 @@ function spawnOne(kind,x,vy){
   if(kind==='cherry')sfxAlert();
   let f=FLAVORS[(Math.random()*FLAVORS.length)|0];
   if(G.lastFlavor&&Math.random()<.3)f=G.lastFlavor;   /* keep flavor runs within reach */
-  items.push({kind,f,bx:x,x,y:-R*2-10,vy,vx:0,rot:rnd(0,TAU),vr:kind==='cherry'?rnd(-1.2,1.2):rnd(-3.5,3.5),
-    sw:rnd(0,TAU),swA,type:(Math.random()*JUNK.length)|0,bounced:false,age:0});
+  const it={kind,f,bx:x,x,y:-R*2-10,vy,vx:0,rot:rnd(0,TAU),vr:kind==='cherry'?rnd(-1.2,1.2):rnd(-3.5,3.5),
+    sw:rnd(0,TAU),swA,type:(Math.random()*JUNK.length)|0,bounced:false,age:0};
+  items.push(it);
+  return it;
 }
 
 /* ---------- per-frame updates ---------- */
@@ -1913,8 +2010,9 @@ function playStep(dt){
   if(G.burst)Tower.reset();else Tower.step(n,G.zone?cone.af*.5:cone.af,G.t,dt);   /* the stack sways half as much in the zone */
   updateStack(dt);
 
-  const S=G.since;S.fudge+=dt;S.syrup+=dt;S.cherry+=dt;
+  const S=G.since;S.fudge+=dt;S.syrup+=dt;S.shell+=dt;S.cherry+=dt;
   if(G.shield>0)G.shield=Math.max(0,G.shield-dt);
+  if(G.shell&&G.shell.t<1)G.shell.t=Math.min(1,G.shell.t+dt/.5);
   if(G.syrupT>0){
     G.syrupT=Math.max(0,G.syrupT-dt);
     if(G.syrupT===0)tone(520,.25,'sine',.06,260);
@@ -1937,7 +2035,11 @@ function playStep(dt){
       if(was&&!above){
         const topX=m?stack[m-1].px:cone.x,dx=it.x-topX,w=reach(it);
         if(Math.abs(dx)<w){
-          if(it.kind==='junk'){if(shielded())zapJunk(it);else hitJunk(it)}
+          if(it.kind==='junk'){
+            if(shielded())zapJunk(it);
+            else if(G.shell){crackShell(it);it.bounced=true;it.vx=Math.sign(dx||1)*rnd(200,280);it.vy*=.6;continue}   /* it glances off */
+            else hitJunk(it);
+          }
           else if(it.kind==='scoop'||it.kind==='gold'){landScoop(it,dx);if(it.zone)zoneCatch()}
           else catchTopping(it);
           items.splice(k,1);
@@ -1945,13 +2047,13 @@ function playStep(dt){
           continue;
         }
         if(it.zone)zoneMiss(it);
-        if((it.kind==='scoop'||it.kind==='gold')&&!it.missed){it.missed=true;if(G.streak)streakEnd()}
+        if((it.kind==='scoop'||it.kind==='gold')&&!it.missed){it.missed=true;if(G.streak&&!it.shadow)streakEnd()}   /* junk was stuck to it: forgiven */
         if(Math.abs(dx)<w+R*.8){it.bounced=true;it.vx=Math.sign(dx||1)*rnd(170,260);it.vy*=.6}
       }
     }
     if(it.y>H+90||it.x<-90||it.x>W+90){
       if(it.zone)zoneMiss(it);
-      if((it.kind==='scoop'||it.kind==='gold')&&!it.missed&&G.streak)streakEnd();   /* slipped by without ever reaching the stack's top */
+      if((it.kind==='scoop'||it.kind==='gold')&&!it.missed&&!it.shadow&&G.streak)streakEnd();   /* slipped by without ever reaching the stack's top */
       items.splice(k,1);
     }
   }
@@ -2002,7 +2104,7 @@ function startGame(){
   stack=[];items=[];debris=[];parts=[];pops=[];Tower.reset();settled=0;BAN.img=null;
   Object.assign(G,{state:'play',score:0,lives:CONFIG.lives.start,mult:1,grace:false,lastFlavor:null,alt:0,extraT:0,pending:null,
     bestMult:1,tall:0,mi:0,shake:0,flash:0,overT:0,overShown:false,newBest:false,
-    syrupT:0,shield:0,burst:null,since:{fudge:0,syrup:0,cherry:0},hole:makeHole(CONFIG.zone.first),zone:null,zoneN:0,whiteout:0,
+    syrupT:0,shield:0,shell:null,burst:null,since:{fudge:0,syrup:0,shell:0,cherry:0},hole:makeHole(CONFIG.zone.first),zone:null,zoneN:0,whiteout:0,
     streak:0,bestStreak:0});
   cone.x=W/2;cone.v=0;cone.af=0;cone.target=W/2;
   restartDrops(.9);
@@ -2087,12 +2189,13 @@ function drawTower(g){
   const n=stack.length,rimY=sy(CH),tipY=sy(0);
   if(rimY<H+50)drawCone(g,cone.x,rimY,tipY);
   drawAura(g,n);
+  const shell=G.state==='play'?G.shell:null;  /* the chocolate shell rides on whichever scoop is on top */
   for(let i=lowVisible(n);i<n;i++){
     const s=stack[i],y0=sy(centerH(i));
     if(y0>H+70)continue;
     if(y0<-70)break;                         /* everything above is off the top too */
     const y=y0-(s.dy||0);
-    stampScoop(g,s.f,s.px,y,s.sq,0,1,s.coat);
+    stampScoop(g,s.f,s.px,y,s.sq,0,1,s.coat,i===n-1?shell:null);
     if(s.f===GOLD)sparkle(g,s.px+Math.cos(G.t*2+i)*R*.6,y+Math.sin(G.t*2.6+i)*R*.5,4+2*Math.sin(G.t*5+i),G.t);
   }
   if(n&&G.state==='play'&&G.mult>1&&!G.burst){
@@ -2465,6 +2568,8 @@ function sfxTopple(){tone(320,.45,'sawtooth',.07,60)}
 function sfxFudge(){tone(330,.14,'sine',.1,520);tone(520,.22,'sine',.09,780,.1)}
 function sfxSyrup(){[0,4,7,11].forEach((s,i)=>tone(660*Math.pow(2,s/12),.15,'sine',.07,0,i*.06))}
 function sfxZap(){tone(900,.15,'sawtooth',.05,170)}
+function sfxShell(){tone(196,.2,'sine',.09,392);tone(587,.14,'triangle',.05,0,.14);tone(784,.2,'triangle',.045,0,.22)}   /* poured on, and it sets */
+function sfxCrack(){tone(2400,.05,'square',.035,800);tone(1500,.07,'square',.03,320,.035);tone(160,.2,'triangle',.08,70)}   /* the shell cracks off */
 function sfxAlert(){tone(1320,.18,'sine',.05,640)}            /* a cherry just appeared up top */
 function sfxBurstStart(){tone(260,.35,'triangle',.08,880)}
 function sfxBurst(k){tone(440*Math.pow(2,NOTES[Math.min(k,NOTES.length-1)]/12),.11,'triangle',.07)}
@@ -2564,8 +2669,8 @@ addEventListener('keyup',e=>{
 /* ---------- interface ---------- */
 const el={score:$('#score'),height:$('#height'),lives:$('#lives'),toast:$('#toast'),banner:$('#banner'),recenter:$('#recenter'),
   menu:$('#menu'),over:$('#over'),hud:$('#hud'),hint:$('#hint'),buff:$('#buff'),buffBar:$('#buffBar'),buffTxt:$('#buffTxt'),buffX:$('#buffX'),
-  streak:$('#streak'),streakN:$('#streakN'),streakX:$('#streakX')};
-let hs=-1,hn=-1,hl=-1,hk=-1,toastT=0,buffOn=false,buffS=-1,cornerOn=null,zKey='';
+  streak:$('#streak'),streakN:$('#streakN'),streakX:$('#streakX'),shell:$('#shellB')};
+let hs=-1,hn=-1,hl=-1,hk=-1,toastT=0,buffOn=false,buffS=-1,shellOn=false,cornerOn=null,zKey='';
 const zm={box:$('#zmeter'),txt:$('#ztxt'),pips:$('#zpips')};
 function buildLives(){                          /* one slot per possible life; empty slots show room for hot fudge */
   const slots=Math.max(CONFIG.lives.max,CONFIG.lives.start),perRow=slots<=3?slots:Math.ceil(slots/2);
@@ -2604,6 +2709,8 @@ function hudUpdate(){
     if(s!==buffS){buffS=s;el.buffTxt.textContent=s+'s'}
     el.buff.classList.toggle('low',G.syrupT<2.5);
   }
+  const sh=G.state==='play'&&!!G.shell;                     /* chocolate shell badge */
+  if(sh!==shellOn){shellOn=sh;el.shell.hidden=!sh}
   const z=G.state==='play'?G.zone:null,zk=z?z.caught+'|'+z.phase+'|'+z.missed:'';   /* zone meter: only touched when it changes */
   if(zk!==zKey){
     zKey=zk;zm.box.hidden=!z;
@@ -2643,7 +2750,7 @@ function begin(){
   if(Settings.controls==='tilt')enableTilt();   /* must be called inside the tap on iPhone */
   startGame();
   el.menu.hidden=true;el.over.hidden=true;el.hud.hidden=false;
-  hs=hn=hl=hk=-1;buffOn=false;buffS=-1;el.buff.hidden=true;el.height.textContent='0 scoops';zKey='';zm.box.hidden=true;
+  hs=hn=hl=hk=-1;buffOn=false;buffS=-1;el.buff.hidden=true;shellOn=false;el.shell.hidden=true;el.height.textContent='0 scoops';zKey='';zm.box.hidden=true;
   try{if(navigator.wakeLock)navigator.wakeLock.request('screen').catch(()=>{})}catch(e){}
   setTimeout(()=>tiltNotice(0),1500);
 }
@@ -2905,7 +3012,7 @@ resize();
 new ResizeObserver(resize).observe(cv);
 buildLives();menuReady=true;menuDemo(demoScoops());drawIcons();
 try{if(document.fonts)document.fonts.load('24px "Lilita One"').then(()=>{drawIcons();resize();warmBanner(G.mi)})}catch(e){}
-if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawnOne,scoopStep,extraStep,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,streakMult,JUNK,JSPR,stampJunk,stampScoop,catchTopping,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
+if(location.hash==='#debug')window.__sc={G,cone,Tower,CONFIG,startGame,spawnOne,shadowed,scoopStep,extraStep,update,FL:FLAVORS,gameOver,hitJunk,TOPS,banner,draw,milestone,lowVisible,BAN,makeHole,holeX,zoneStart,centerH,sy,musicState:Music.state,ZTUNE,streakMult,JUNK,JSPR,stampJunk,stampScoop,catchTopping,get settled(){return settled},get SB(){return SB},get H(){return H},get landY(){return sy(centerH(stack.length))},get stack(){return stack},get items(){return items},get parts(){return parts}};
 requestAnimationFrame(frame);
 })();
 </script>
